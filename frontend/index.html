@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RAIZEL XMD — Déployer un bot WhatsApp</title>
+  <link href="styles.css" rel="stylesheet" />
+</head>
+<body>
+  <main class="viewport">
+    <header class="brand">
+      <div class="logo" aria-hidden="true">R</div>
+      <div class="brand-text">
+        <h1>RAIZEL XMD</h1>
+        <p>Déployez votre bot WhatsApp en quelques clics</p>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="notice">
+        <p><strong>Rejoins la chaîne officielle avant de déployer.</strong></p>
+        <label class="check">
+          <input type="checkbox" id="joined" />
+          J’ai rejoint la chaîne officielle
+        </label>
+      </div>
+
+      <nav class="modes">
+        <button class="mode active" data-mode="pairing">Pairing Code</button>
+        <button class="mode" data-mode="qr">QR Code</button>
+      </nav>
+
+      <form id="pair-form" class="form" onsubmit="return false;">
+        <fieldset>
+          <label for="phone">NUMÉRO WHATSAPP *</label>
+          <input id="phone" inputmode="numeric" placeholder="32471355640" />
+          <small>Format: numéro international sans +</small>
+        </fieldset>
+
+        <fieldset>
+          <label for="username">NOM D'UTILISATEUR *</label>
+          <input id="username" placeholder="monbot" />
+          <small>3–20 caractères alphanumériques</small>
+        </fieldset>
+
+        <div id="qrContainer" style="display:none; text-align:center; margin:12px 0;">
+          <img id="qrImg" alt="QR code" style="max-width:200px; border-radius:8px;"/>
+          <div><small>Scannez le QR depuis WhatsApp → Appareils liés → Lier un appareil.</small></div>
+        </div>
+
+        <button id="generate" class="cta">📞 Générer le Pairing Code</button>
+
+        <div id="status" class="status">
+          <span class="dot"></span>
+          <span id="statusText">Prêt à déployer</span>
+        </div>
+      </form>
+    </section>
+
+    <footer class="footer">
+      <div class="how">
+        <h3>💡 Comment ça marche :</h3>
+        <ol>
+          <li>Entrez votre numéro (sans +) et un nom d’utilisateur unique</li>
+          <li>Sélectionnez Pairing ou QR</li>
+          <li>Suivez les instructions (scan QR ou entrez le pairing code)</li>
+        </ol>
+      </div>
+    </footer>
+  </main>
+
+  <script>
+    // configure l'URL backend ici (ou via env build)
+    window.API_BASE = (function(){
+      const host = location.origin; // default to same origin
+      // si tu héberges backend ailleurs : return "https://ton-backend.onrender.com";
+      return host.replace(/\/$/,'') + '/api';
+    })();
+  </script>
+  <script src="app.js"></script>
+</body>
+</html>
