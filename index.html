@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<title>RAIZEL-XMD • Pairing</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+:root { --bg:#0b0b14; --card:rgba(25,25,40,.75); --primary:#8b5cf6; --primary-glow:#a78bfa; --text:#fff; --muted:#9ca3af; }
+* { box-sizing:border-box; font-family:Inter,sans-serif; }
+body{margin:0;background:radial-gradient(circle at top,#1a1440,var(--bg));color:var(--text);overflow-x:hidden;}
+.bg{position:fixed;inset:0;background:radial-gradient(circle at 20% 20%,#8b5cf630,transparent 40%),radial-gradient(circle at 80% 80%,#6366f130,transparent 40%);}
+.app{position:relative;z-index:1;max-width:420px;margin:auto;padding:20px;}
+.logo{display:flex;flex-direction:column;align-items:center;margin:30px 0;}
+.logo .icon{width:64px;height:64px;border-radius:20px;background:linear-gradient(135deg,var(--primary),var(--primary-glow));display:flex;align-items:center;justify-content:center;font-size:28px;box-shadow:0 0 30px var(--primary);}
+.logo h1{margin:14px 0 4px;}
+.logo p{color:var(--muted);font-size:14px;}
+.card{background:var(--card);backdrop-filter:blur(16px);border-radius:18px;padding:18px;margin-bottom:20px;border:1px solid rgba(255,255,255,.08);}
+label{font-size:12px;color:var(--muted);}
+input{width:100%;padding:14px;border-radius:12px;border:none;margin-top:6px;margin-bottom:14px;background:#0f0f1e;color:white;}
+.btn{width:100%;padding:14px;border-radius:14px;border:none;background:linear-gradient(135deg,var(--primary),var(--primary-glow));color:white;font-weight:700;cursor:pointer;box-shadow:0 0 20px #8b5cf660;}
+.result{text-align:center;margin-top:14px;}
+.code{font-size:26px;letter-spacing:6px;color:#22c55e;}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="app">
+  <div class="logo">
+    <div class="icon">Σ</div>
+    <h1>RAIZEL-XMD</h1>
+    <p>Déploiement de bot WhatsApp</p>
+  </div>
+  <div class="card">
+    <label>Numéro WhatsApp</label>
+    <input id="phone" placeholder="2376xxxxxxx" />
+    <label>Nom du bot</label>
+    <input id="username" placeholder="monbot" />
+    <button class="btn" id="generateBtn">GÉNÉRER PAIRING CODE</button>
+    <div class="result" id="result"></div>
+  </div>
+</div>
+<script>
+const phoneInput = document.getElementById('phone');
+const usernameInput = document.getElementById('username');
+const result = document.getElementById('result');
+
+document.getElementById('generateBtn').onclick = async () => {
+  const phone = phoneInput.value.trim();
+  const username = usernameInput.value.trim();
+  if (!phone || !username) { result.innerHTML = '❌ Champs manquants'; return; }
+
+  result.innerHTML = '⏳ Connexion en cours...';
+  try {
+    const res = await fetch('/api/pairing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, username })
+    });
+    const data = await res.json();
+    if (data.code) result.innerHTML = '<div class="code">'+data.code+'</div>';
+    else result.innerHTML = '<pre style="text-align:left; color:#f87171;">'+JSON.stringify(data, null, 2)+'</pre>';
+  } catch(e) { console.error(e); result.innerHTML='❌ Serveur injoignable'; }
+};
+</script>
+</body>
+</html>
