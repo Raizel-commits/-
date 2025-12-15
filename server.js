@@ -191,24 +191,19 @@ app.post('/pairing', async (req, res) => {
   const { username, phone } = req.body;
   if (!username || !phone) return res.json({ error: 'Champs manquants' });
 
-  const sock = await createConnection(username, phone);
-
-  if (sock.authState?.creds?.registered) return res.json({ status: 'Déjà connecté' });
-
   try {
-    await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject('Timeout connexion'), 15000);
-      sock.ev.on('connection.update', (update) => {
-        if(update.connection==='open') resolve();
-        if(update.connection==='close') reject('Connexion fermée');
-      });
-    });
+    const sock = await createConnection(username, phone);
 
+    if (sock.authState?.creds?.registered)
+      return res.json({ status: 'Déjà connecté' });
+
+    // 🔑 Demander le code directement, plus de timeout inutile
     const code = await sock.requestPairingCode(phone);
-    res.json({ code });
+    return res.json({ code });
+
   } catch (e) {
     console.error('Erreur pairing:', e);
-    res.json({ error: 'Erreur pairing' });
+    return res.json({ error: 'Erreur pairing' });
   }
 });
 
