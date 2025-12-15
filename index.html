@@ -1,23 +1,23 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<title>RAIZEL XMD • Pairing</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<title>RAIZEL-XMD • Pairing & QR</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 
 <style>
 :root {
   --bg: #0b0b14;
-  --card: rgba(25, 25, 40, .75);
+  --card: rgba(25,25,40,.75);
   --primary: #8b5cf6;
   --primary-glow: #a78bfa;
   --text: #fff;
   --muted: #9ca3af;
 }
 
-* { box-sizing: border-box; font-family: 'Inter', sans-serif; }
+* { box-sizing: border-box; font-family: Inter, sans-serif; }
 
 body {
   margin: 0;
@@ -26,7 +26,6 @@ body {
   overflow-x: hidden;
 }
 
-/* 🌌 animated background */
 .bg {
   position: fixed;
   inset: 0;
@@ -36,6 +35,7 @@ body {
   animation: bgMove 10s infinite alternate;
   z-index: 0;
 }
+
 @keyframes bgMove {
   from { filter: hue-rotate(0deg); }
   to { filter: hue-rotate(25deg); }
@@ -49,13 +49,13 @@ body {
   padding: 20px;
 }
 
-/* 🔷 header */
 .logo {
   display: flex;
   flex-direction: column;
   align-items: center;
   margin: 30px 0;
 }
+
 .logo .icon {
   width: 64px;
   height: 64px;
@@ -67,16 +67,10 @@ body {
   font-size: 28px;
   box-shadow: 0 0 30px var(--primary);
 }
-.logo h1 {
-  margin: 14px 0 4px;
-  letter-spacing: 1px;
-}
-.logo p {
-  color: var(--muted);
-  font-size: 14px;
-}
 
-/* 🧊 card */
+.logo h1 { margin: 14px 0 4px; }
+.logo p { color: var(--muted); font-size: 14px; }
+
 .card {
   background: var(--card);
   backdrop-filter: blur(16px);
@@ -86,23 +80,17 @@ body {
   border: 1px solid rgba(255,255,255,.08);
   animation: fadeUp .8s ease;
 }
+
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ℹ️ how */
-.how li {
-  font-size: 14px;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-
-/* ✏️ inputs */
 label {
   font-size: 12px;
   color: var(--muted);
 }
+
 input {
   width: 100%;
   padding: 14px;
@@ -112,10 +100,27 @@ input {
   margin-bottom: 14px;
   background: #0f0f1e;
   color: white;
-  outline: none;
 }
 
-/* 🔘 buttons */
+.switch {
+  display: flex;
+  gap: 10px;
+}
+
+.switch button {
+  flex: 1;
+  background: #15152a;
+  border-radius: 12px;
+  padding: 12px;
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+.switch .active {
+  background: var(--primary);
+}
+
 .btn {
   width: 100%;
   padding: 14px;
@@ -124,57 +129,22 @@ input {
   background: linear-gradient(135deg, var(--primary), var(--primary-glow));
   color: white;
   font-weight: 700;
-  letter-spacing: .5px;
   cursor: pointer;
-  position: relative;
-  overflow: hidden;
   box-shadow: 0 0 20px #8b5cf660;
 }
-.btn:active {
-  transform: scale(.97);
-}
 
-/* ripple */
-.btn span {
-  position: absolute;
-  border-radius: 50%;
-  transform: scale(0);
-  animation: ripple .6s linear;
-  background: rgba(255,255,255,.6);
-}
-@keyframes ripple {
-  to { transform: scale(4); opacity: 0; }
-}
-
-.switch {
-  display: flex;
-  gap: 10px;
-}
-.switch button {
-  flex: 1;
-  background: #15152a;
-  border-radius: 12px;
-  padding: 12px;
-  border: none;
-  color: white;
-}
-.switch .active {
-  background: var(--primary);
-}
-
-/* 📦 result */
 .result {
   text-align: center;
   margin-top: 14px;
 }
+
 .code {
   font-size: 26px;
   letter-spacing: 6px;
   color: #22c55e;
 }
-img {
-  max-width: 220px;
-}
+
+img { max-width: 220px; }
 </style>
 </head>
 
@@ -186,33 +156,22 @@ img {
   <div class="logo">
     <div class="icon">Σ</div>
     <h1>RAIZEL-XMD</h1>
-    <p>Déployez votre bot WhatsApp</p>
-  </div>
-
-  <div class="card">
-    <b>💡 Comment ça marche</b>
-    <ol class="how">
-      <li>Entrez votre numéro WhatsApp</li>
-      <li>Choisissez un nom</li>
-      <li>Générez le code</li>
-      <li>WhatsApp → Appareils liés</li>
-      <li>Entrez le code affiché</li>
-    </ol>
+    <p>Déploiement de bot WhatsApp</p>
   </div>
 
   <div class="card">
     <label>Numéro WhatsApp</label>
-    <input id="phone" placeholder="2376xxxxxxx">
+    <input id="phone" placeholder="2376xxxxxxx" />
 
-    <label>Nom d’utilisateur</label>
-    <input id="username" placeholder="monbot">
+    <label>Nom du bot</label>
+    <input id="username" placeholder="monbot" />
 
     <div class="switch">
-      <button class="active" onclick="mode='pairing'">🔑 Pairing</button>
-      <button onclick="mode='qr'">📸 QR</button>
+      <button id="btnPairing" class="active">🔑 Pairing</button>
+      <button id="btnQR">📸 QR</button>
     </div>
 
-    <button class="btn" onclick="generate(event)">GÉNÉRER</button>
+    <button class="btn" id="generateBtn">GÉNÉRER</button>
 
     <div class="result" id="result"></div>
   </div>
@@ -222,37 +181,53 @@ img {
 <script>
 let mode = 'pairing'
 
-function ripple(e) {
-  const btn = e.currentTarget
-  const circle = document.createElement("span")
-  const d = Math.max(btn.clientWidth, btn.clientHeight)
-  circle.style.width = circle.style.height = d + "px"
-  circle.style.left = e.offsetX - d / 2 + "px"
-  circle.style.top = e.offsetY - d / 2 + "px"
-  btn.appendChild(circle)
-  setTimeout(() => circle.remove(), 600)
+const phoneInput = document.getElementById('phone')
+const usernameInput = document.getElementById('username')
+const result = document.getElementById('result')
+
+document.getElementById('btnPairing').onclick = () => switchMode('pairing')
+document.getElementById('btnQR').onclick = () => switchMode('qr')
+document.getElementById('generateBtn').onclick = generate
+
+function switchMode(m) {
+  mode = m
+  document.getElementById('btnPairing').classList.toggle('active', m === 'pairing')
+  document.getElementById('btnQR').classList.toggle('active', m === 'qr')
+  result.innerHTML = ''
 }
 
-async function generate(e) {
-  ripple(e)
-  const phone = phone.value
-  const username = username.value
-  const result = document.getElementById('result')
-  result.innerHTML = '⏳ Chargement...'
+async function generate() {
+  const phone = phoneInput.value.trim()
+  const username = usernameInput.value.trim()
 
-  const res = await fetch('/' + mode, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone, username })
-  })
-  const data = await res.json()
+  if (!phone || !username) {
+    result.innerHTML = '❌ Champs manquants'
+    return
+  }
 
-  if (data.code) {
-    result.innerHTML = `<div class="code">${data.code}</div>`
-  } else if (data.qr) {
-    result.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(data.qr)}">`
-  } else {
-    result.innerHTML = data.status || data.error
+  result.innerHTML = '⏳ Connexion en cours...'
+
+  try {
+    const res = await fetch('/' + mode, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, username })
+    })
+
+    const data = await res.json()
+
+    if (data.code) {
+      result.innerHTML = `<div class="code">${data.code}</div>`
+    } else if (data.qr) {
+      result.innerHTML =
+        `<img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(data.qr)}">`
+    } else {
+      result.innerHTML = data.status || data.error || '❌ Erreur'
+    }
+
+  } catch (e) {
+    console.error(e)
+    result.innerHTML = '❌ Serveur injoignable'
   }
 }
 </script>
