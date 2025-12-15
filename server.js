@@ -120,7 +120,7 @@ async function createConnection(username, phone) {
    ROUTES
 ====================== */
 
-/* 🔍 test */
+/* 🔍 Test */
 app.get('/ping', (_, res) => {
   res.json({ ok: true })
 })
@@ -150,7 +150,7 @@ app.post('/qr', async (req, res) => {
   }, 1000)
 })
 
-/* 🔑 PAIRING */
+/* 🔑 Pairing */
 app.post('/pairing', async (req, res) => {
   const { phone, username } = req.body
   if (!phone || !username)
@@ -158,15 +158,23 @@ app.post('/pairing', async (req, res) => {
 
   const sock = await createConnection(username, phone)
 
-  if (sock.authState?.creds?.registered) {
-    return res.json({ status: 'Déjà connecté' })
-  }
+  // Déjà connecté
+  if (sock.user) return res.json({ status: 'Déjà connecté' })
 
+  // Attendre l'ouverture du socket
   try {
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject('Timeout connexion'), 15000)
+      sock.ev.on('connection.update', (update) => {
+        if (update.connection === 'open') resolve()
+        if (update.connection === 'close') reject('Connexion fermée')
+      })
+    })
+
     const code = await sock.requestPairingCode(phone)
     res.json({ code })
   } catch (e) {
-    console.error(e)
+    console.error('Erreur pairing:', e)
     res.json({ error: 'Erreur pairing' })
   }
 })
