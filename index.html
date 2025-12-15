@@ -1,122 +1,261 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RAIZEL XMD - Déployer</title>
-    <style>
-        /* (Même CSS que précédemment, je le garde identique pour la fidélité) */
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1e1e2f, #2a2a4a); color: #e0e0ff; margin: 0; padding: 20px; min-height: 100vh; }
-        .container { max-width: 800px; margin: 40px auto; background: rgba(30, 30, 50, 0.8); padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        h1 { text-align: center; color: #00ffaa; text-shadow: 0 0 10px #00ffaa; margin-bottom: 10px; }
-        .subtitle { text-align: center; font-size: 1.2em; margin-bottom: 30px; color: #a0ffa0; }
-        .channel { text-align: center; background: #00ffaa; color: #000; padding: 15px; border-radius: 10px; margin-bottom: 40px; font-weight: bold; }
-        .channel a { color: #000; text-decoration: none; }
-        .section { background: rgba(40,40,70,0.6); padding: 20px; border-radius: 10px; margin-bottom: 30px; }
-        .tip { font-weight: bold; color: #00ffaa; margin-bottom: 15px; }
-        ol { padding-left: 20px; }
-        li { margin-bottom: 10px; }
-        .form-group { margin: 20px 0; }
-        label { display: block; margin-bottom: 8px; color: #ccc; }
-        input[type="text"] { width: 100%; padding: 12px; background: #2a2a40; border: none; border-radius: 8px; color: #fff; font-size: 1em; }
-        button { background: #00ffaa; color: #000; border: none; padding: 12px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 15px; }
-        button:hover { background: #00cc88; }
-        #qrCode img, #pairingCode { text-align: center; margin-top: 20px; }
-        #qrCode img { max-width: 300px; background: white; padding: 10px; border-radius: 10px; }
-        .ready { text-align: center; font-size: 1.5em; color: #00ffaa; margin-top: 50px; text-shadow: 0 0 10px #00ffaa; }
-        hr { border: 1px solid #00ffaa; margin: 40px 0; }
-        .status { color: #ffaa00; font-weight: bold; }
-    </style>
+<meta charset="UTF-8">
+<title>RAIZEL XMD • Pairing</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --bg: #0b0b14;
+  --card: rgba(25, 25, 40, .75);
+  --primary: #8b5cf6;
+  --primary-glow: #a78bfa;
+  --text: #fff;
+  --muted: #9ca3af;
+}
+
+* { box-sizing: border-box; font-family: 'Inter', sans-serif; }
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, #1a1440, var(--bg));
+  color: var(--text);
+  overflow-x: hidden;
+}
+
+/* 🌌 animated background */
+.bg {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 20%, #8b5cf630, transparent 40%),
+    radial-gradient(circle at 80% 80%, #6366f130, transparent 40%);
+  animation: bgMove 10s infinite alternate;
+  z-index: 0;
+}
+@keyframes bgMove {
+  from { filter: hue-rotate(0deg); }
+  to { filter: hue-rotate(25deg); }
+}
+
+.app {
+  position: relative;
+  z-index: 1;
+  max-width: 420px;
+  margin: auto;
+  padding: 20px;
+}
+
+/* 🔷 header */
+.logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 30px 0;
+}
+.logo .icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-glow));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  box-shadow: 0 0 30px var(--primary);
+}
+.logo h1 {
+  margin: 14px 0 4px;
+  letter-spacing: 1px;
+}
+.logo p {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* 🧊 card */
+.card {
+  background: var(--card);
+  backdrop-filter: blur(16px);
+  border-radius: 18px;
+  padding: 18px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(255,255,255,.08);
+  animation: fadeUp .8s ease;
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ℹ️ how */
+.how li {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+/* ✏️ inputs */
+label {
+  font-size: 12px;
+  color: var(--muted);
+}
+input {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  border: none;
+  margin-top: 6px;
+  margin-bottom: 14px;
+  background: #0f0f1e;
+  color: white;
+  outline: none;
+}
+
+/* 🔘 buttons */
+.btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, var(--primary), var(--primary-glow));
+  color: white;
+  font-weight: 700;
+  letter-spacing: .5px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 20px #8b5cf660;
+}
+.btn:active {
+  transform: scale(.97);
+}
+
+/* ripple */
+.btn span {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  animation: ripple .6s linear;
+  background: rgba(255,255,255,.6);
+}
+@keyframes ripple {
+  to { transform: scale(4); opacity: 0; }
+}
+
+.switch {
+  display: flex;
+  gap: 10px;
+}
+.switch button {
+  flex: 1;
+  background: #15152a;
+  border-radius: 12px;
+  padding: 12px;
+  border: none;
+  color: white;
+}
+.switch .active {
+  background: var(--primary);
+}
+
+/* 📦 result */
+.result {
+  text-align: center;
+  margin-top: 14px;
+}
+.code {
+  font-size: 26px;
+  letter-spacing: 6px;
+  color: #22c55e;
+}
+img {
+  max-width: 220px;
+}
+</style>
 </head>
+
 <body>
-    <div class="container">
-        <h1>RAIZEL XMD</h1>
-        <p class="subtitle">Déployez votre bot WhatsApp en quelques clics</p>
+<div class="bg"></div>
 
-        <div class="channel">
-            🔗 Rejoins la chaîne officielle avant de déployer. Cela débloque l’accès à l’interface.<br>
-            <a href="https://whatsapp.com/channel/0029Vb6xeAHFsn0cxy9XL90A" target="_blank">Ouvrir la chaîne WhatsApp</a>
-        </div>
+<div class="app">
 
-        <!-- Section Pairing Code -->
-        <div class="section">
-            <div class="tip">💡 Comment ça marche (Pairing Code) :</div>
-            <ol>
-                <li>Entrez votre numéro WhatsApp (sans le +)</li>
-                <li>Choisissez un nom d'utilisateur</li>
-                <li>Un code de pairing sera généré</li>
-                <li>Ouvrez WhatsApp → Appareils liés → Lier un appareil</li>
-                <li>Entrez le code affiché ci-dessous</li>
-            </ol>
-            <p>Format: numéro international sans + (ex: 237699777530)<br>3-20 caractères alphanumériques</p>
+  <div class="logo">
+    <div class="icon">Σ</div>
+    <h1>RAIZEL-XMD</h1>
+    <p>Déployez votre bot WhatsApp</p>
+  </div>
 
-            <div class="form-group">
-                <label>Numéro WhatsApp</label>
-                <input type="text" id="phoneCode" placeholder="ex: 237699777530">
-            </div>
-            <div class="form-group">
-                <label>Nom d'utilisateur</label>
-                <input type="text" id="usernameCode" placeholder="3-20 caractères alphanumériques">
-            </div>
-            <button onclick="generatePairingCode()">Générer le Pairing Code</button>
-            <div id="pairingCode" class="status"></div>
-        </div>
+  <div class="card">
+    <b>💡 Comment ça marche</b>
+    <ol class="how">
+      <li>Entrez votre numéro WhatsApp</li>
+      <li>Choisissez un nom</li>
+      <li>Générez le code</li>
+      <li>WhatsApp → Appareils liés</li>
+      <li>Entrez le code affiché</li>
+    </ol>
+  </div>
 
-        <hr>
+  <div class="card">
+    <label>Numéro WhatsApp</label>
+    <input id="phone" placeholder="2376xxxxxxx">
 
-        <!-- Section QR Code -->
-        <div class="section">
-            <div class="tip">💡 Comment ça marche (QR Code) :</div>
-            <ol>
-                <li>Entrez votre numéro WhatsApp (sans le +)</li>
-                <li>Choisissez un nom d'utilisateur</li>
-                <li>Un QR code sera généré</li>
-                <li>Ouvrez WhatsApp → Appareils liés → Lier un appareil</li>
-                <li>Scannez le QR code affiché ci-dessous</li>
-            </ol>
-            <p>Format: numéro international sans + (ex: 237699777530)<br>3-20 caractères alphanumériques (a-z, A-Z, 0-9, _, -)</p>
+    <label>Nom d’utilisateur</label>
+    <input id="username" placeholder="monbot">
 
-            <div class="form-group">
-                <label>Numéro WhatsApp</label>
-                <input type="text" id="phoneQR" placeholder="ex: 237699777530">
-            </div>
-            <div class="form-group">
-                <label>Nom d'utilisateur</label>
-                <input type="text" id="usernameQR" placeholder="3-20 caractères (a-z, A-Z, 0-9, _, -)">
-            </div>
-            <button onclick="generateQR()">Générer le QR Code</button>
-            <div id="qrCode"></div>
-        </div>
-
-        <p class="ready">Prêt à déployer</p>
+    <div class="switch">
+      <button class="active" onclick="mode='pairing'">🔑 Pairing</button>
+      <button onclick="mode='qr'">📸 QR</button>
     </div>
 
-    <script>
-        async function generatePairingCode() {
-            const phone = document.getElementById('phoneCode').value.trim();
-            const username = document.getElementById('usernameCode').value.trim();
-            if (!phone || !username) return alert("Remplis tous les champs !");
-            const res = await fetch('/pairing', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({phone, username})
-            });
-            const data = await res.json();
-            document.getElementById('pairingCode').innerHTML = data.code ? `<p>Code : <strong>${data.code}</strong><br>Status : ${data.status}</p>` : `<p style="color:red;">Erreur : ${data.error}</p>`;
-        }
+    <button class="btn" onclick="generate(event)">GÉNÉRER</button>
 
-        async function generateQR() {
-            const phone = document.getElementById('phoneQR').value.trim();
-            const username = document.getElementById('usernameQR').value.trim();
-            if (!phone || !username) return alert("Remplis tous les champs !");
-            const res = await fetch('/qr', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({phone, username})
-            });
-            const data = await res.json();
-            document.getElementById('qrCode').innerHTML = data.qr ? `<img src="${data.qr}" alt="QR Code"><p>Status : ${data.status}</p>` : `<p style="color:red;">Erreur : ${data.error}</p>`;
-        }
-    </script>
+    <div class="result" id="result"></div>
+  </div>
+
+</div>
+
+<script>
+let mode = 'pairing'
+
+function ripple(e) {
+  const btn = e.currentTarget
+  const circle = document.createElement("span")
+  const d = Math.max(btn.clientWidth, btn.clientHeight)
+  circle.style.width = circle.style.height = d + "px"
+  circle.style.left = e.offsetX - d / 2 + "px"
+  circle.style.top = e.offsetY - d / 2 + "px"
+  btn.appendChild(circle)
+  setTimeout(() => circle.remove(), 600)
+}
+
+async function generate(e) {
+  ripple(e)
+  const phone = phone.value
+  const username = username.value
+  const result = document.getElementById('result')
+  result.innerHTML = '⏳ Chargement...'
+
+  const res = await fetch('/' + mode, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, username })
+  })
+  const data = await res.json()
+
+  if (data.code) {
+    result.innerHTML = `<div class="code">${data.code}</div>`
+  } else if (data.qr) {
+    result.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(data.qr)}">`
+  } else {
+    result.innerHTML = data.status || data.error
+  }
+}
+</script>
+
 </body>
 </html>
