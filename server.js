@@ -1,159 +1,192 @@
 import express from 'express'
+import cors from 'cors'
 import { Boom } from '@hapi/boom'
 import makeWASocket, {
-    useMultiFileAuthState,
-    DisconnectReason,
-    fetchLatestBaileysVersion
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion
 } from '@whiskeysockets/baileys'
 import pino from 'pino'
 import fs from 'fs-extra'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-/* 🔧 __dirname ESM */
+/* ======================
+   ESM __dirname
+====================== */
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-/* 🌐 Express */
+/* ======================
+   EXPRESS
+====================== */
 const app = express()
+app.use(cors())
 app.use(express.json())
-app.use(express.static(__dirname))
+app.use(express.static(path.join(__dirname)))
 
-/* 🧠 Sessions + commandes */
+/* ======================
+   STOCKAGE
+====================== */
 const sessions = new Map()
 const commands = new Map()
 const qrCache = new Map()
 
-/* ⚙️ Charger les commandes */
+/* ======================
+   COMMANDES
+====================== */
 async function loadCommands() {
-    const cmdPath = path.join(__dirname, 'commands')
-    const files = await fs.readdir(cmdPath)
+  const cmdPath = path.join(__dirname, 'commands')
+  if (!await fs.pathExists(cmdPath)) return
 
-    for (const file of files) {
-        if (!file.endsWith('.js')) continue
-
-        const { default: command } = await import(`./commands/${file}`)
-
-        commands.set(command.name, command)
-        console.log(`✅ Commande chargée : ${command.name}`)
-    }
+  const files = await fs.readdir(cmdPath)
+  for (const file of files) {
+    if (!file.endsWith('.js')) continue
+    const { default: cmd } = await import(`./commands/${file}`)
+    commands.set(cmd.name.toLowerCase(), cmd)
+    console.log('✅ Commande chargée:', cmd.name)
+  }
 }
 
-/* 🤖 Créer une connexion WhatsApp */
+/* ======================
+   CONNEXION WHATSAPP
+====================== */
 async function createConnection(username, phone) {
-    const sessionDir = path.join(__dirname, 'sessions', username)
-    await fs.ensureDir(sessionDir)
+  if (sessions.has(username)) return sessions.get(username)
 
-    const { state, saveCreds } = await useMultiFileAuthState(sessionDir)
-    const { version } = await fetchLatestBaileysVersion()
+  const sessionDir = path.join(__dirname, 'sessions', username)
+  await fs.ensureDir(sessionDir)
 
-    const sock = makeWASocket({
-        version,
-        auth: state,
-        logger: pino({ level: 'silent' }),
-        printQRInTerminal: false,
-        browser: ['RAIZEL-XMD', 'Chrome', '6.7.5']
-    })
+  const { state, saveCreds } = await useMultiFileAuthState(sessionDir)
+  const { version } = await fetchLatestBaileysVersion()
 
-    sessions.set(username, sock)
-    sock.ev.on('creds.update', saveCreds)
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    logger: pino({ level: 'silent' }),
+    printQRInTerminal: false,
+    browser: ['RAIZEL-XMD', 'Chrome', '6.7.5']
+  })
 
-    /* 🔗 Connexion */
-    sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect, qr } = update
+  sessions.set(username, sock)
+  sock.ev.on('creds.update', saveCreds)
 
-        if (qr) qrCache.set(username, qr)
+  sock.ev.on('connection.update', (u) => {
+    const { connection, lastDisconnect, qr } = u
 
-        if (connection === 'open') {
-            console.log(`✅ ${username} connecté`)
-            qrCache.delete(username)
-        }
+    if (qr) qrCache.set(username, qr)
 
-        if (connection === 'close') {
-            const code = lastDisconnect?.error instanceof Boom
-                ? lastDisconnect.error.output.statusCode
-                : 0
+    if (connection === 'open') {
+      console.log(`✅ ${username} connecté`)
+      qrCache.delete(username)
+    }
 
-            if (code !== DisconnectReason.loggedOut) {
-                console.log(`🔄 Reconnexion ${username}`)
-                createConnection(username, phone)
-            } else {
-                sessions.delete(username)
-            }
-        }
-    })
+    if (connection === 'close') {
+      const code = lastDisconnect?.error instanceof Boom
+        ? lastDisconnect.error.output.statusCode
+        : 0
 
-    /* 📩 Messages → commandes */
-    sock.ev.on('messages.upsert', async ({ messages }) => {
-        const msg = messages[0]
-        if (!msg?.message || msg.key.fromMe) return
+      sessions.delete(username)
+      qrCache.delete(username)
 
-        const text =
-            msg.message.conversation ||
-            msg.message.extendedTextMessage?.text
+      if (code !== DisconnectReason.loggedOut) {
+        console.log(`🔄 Reconnexion ${username}`)
+        setTimeout(() => createConnection(username, phone), 2000)
+      }
+    }
+  })
 
-        if (!text || !text.startsWith('!')) return
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages?.[0]
+    if (!msg?.message || msg.key.fromMe) return
 
-        const [cmdName, ...args] = text.slice(1).split(' ')
-        const cmd = commands.get(cmdName.toLowerCase())
-        if (!cmd) return
+    const text =
+      msg.message.conversation ||
+      msg.message.extendedTextMessage?.text
 
-        try {
-            await cmd.execute(sock, msg, args)
-        } catch (e) {
-            console.error(e)
-        }
-    })
+    if (!text || !text.startsWith('!')) return
 
-    return sock
+    const [name, ...args] = text.slice(1).split(' ')
+    const cmd = commands.get(name.toLowerCase())
+    if (!cmd) return
+
+    try {
+      await cmd.execute(sock, msg, args)
+    } catch (e) {
+      console.error('❌ CMD ERROR', e)
+    }
+  })
+
+  return sock
 }
+
+/* ======================
+   ROUTES
+====================== */
+
+/* 🔍 test */
+app.get('/ping', (_, res) => {
+  res.json({ ok: true })
+})
 
 /* 📸 QR */
 app.post('/qr', async (req, res) => {
-    const { phone, username } = req.body
-    if (!phone || !username) return res.json({ error: 'Paramètres manquants' })
+  const { phone, username } = req.body
+  if (!phone || !username)
+    return res.json({ error: 'Paramètres manquants' })
 
-    if (!sessions.get(username)) {
-        await createConnection(username, phone)
+  await createConnection(username, phone)
+
+  let tries = 0
+  const interval = setInterval(() => {
+    tries++
+    const qr = qrCache.get(username)
+
+    if (qr) {
+      clearInterval(interval)
+      return res.json({ qr })
     }
 
-    let tries = 0
-    const wait = setInterval(() => {
-        const qr = qrCache.get(username)
-        tries++
-
-        if (qr) {
-            clearInterval(wait)
-            return res.json({ qr, status: 'Scan requis' })
-        }
-
-        if (tries >= 30) {
-            clearInterval(wait)
-            return res.json({ qr: null, status: 'Timeout' })
-        }
-    }, 1000)
+    if (tries > 30) {
+      clearInterval(interval)
+      return res.json({ status: 'Timeout QR' })
+    }
+  }, 1000)
 })
 
-/* 🔢 Pairing code */
+/* 🔑 PAIRING */
 app.post('/pairing', async (req, res) => {
-    const { phone, username } = req.body
-    if (!phone || !username) return res.json({ error: 'Paramètres manquants' })
+  const { phone, username } = req.body
+  if (!phone || !username)
+    return res.json({ error: 'Paramètres manquants' })
 
-    let sock = sessions.get(username)
-    if (!sock) sock = await createConnection(username, phone)
+  const sock = await createConnection(username, phone)
 
-    if (sock.authState.creds.registered) {
-        return res.json({ status: 'Déjà connecté' })
-    }
+  if (sock.authState?.creds?.registered) {
+    return res.json({ status: 'Déjà connecté' })
+  }
 
+  try {
     const code = await sock.requestPairingCode(phone)
     res.json({ code })
+  } catch (e) {
+    console.error(e)
+    res.json({ error: 'Erreur pairing' })
+  }
 })
 
-/* 🚀 START */
+/* ======================
+   START
+====================== */
 await loadCommands()
 
 const PORT = process.env.PORT || 3000
-app.listen(PORT, () =>
-    console.log(`🔥 RAIZEL XMD lancé sur le port ${PORT}`)
-)
+app.listen(PORT, () => {
+  console.log(`🔥 RAIZEL-XMD backend actif sur ${PORT}`)
+})
+
+/* ======================
+   SAFE ERRORS
+====================== */
+process.on('uncaughtException', e => console.error(e))
+process.on('unhandledRejection', e => console.error(e))
