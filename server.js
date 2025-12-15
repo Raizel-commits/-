@@ -24,9 +24,26 @@ app.use(express.json());
    MULTI-BOT STORAGE
 ====================== */
 const sessions = new Map(); // username => sock
+const commands = new Map();
 
 /* ======================
-   CREATE BOT CONNECTION
+   LOAD COMMANDS
+====================== */
+async function loadCommands() {
+  const cmdPath = path.join(__dirname, 'commands');
+  if (!await fs.pathExists(cmdPath)) return;
+
+  const files = await fs.readdir(cmdPath);
+  for (const file of files) {
+    if (!file.endsWith('.js')) continue;
+    const { default: cmd } = await import(`./commands/${file}`);
+    commands.set(cmd.name.toLowerCase(), cmd);
+    console.log('✅ Commande chargée:', cmd.name);
+  }
+}
+
+/* ======================
+   CREATE CONNECTION
 ====================== */
 async function createConnection(username, phone) {
   if (sessions.has(username)) return sessions.get(username);
@@ -48,24 +65,51 @@ async function createConnection(username, phone) {
   sessions.set(username, sock);
   sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect } = update;
+  // Attendre que le socket soit connecté avant de retourner
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Timeout connection')), 15000);
 
-    if (connection === 'open') {
-      console.log(`✅ ${username} connecté`);
-    }
+    sock.ev.on('connection.update', (update) => {
+      const { connection, lastDisconnect } = update;
 
-    if (connection === 'close') {
-      const code = lastDisconnect?.error instanceof Boom
-        ? lastDisconnect.error.output.statusCode
-        : 0;
-
-      sessions.delete(username);
-
-      if (code !== DisconnectReason.loggedOut) {
-        console.log(`🔄 Reconnexion ${username}`);
-        setTimeout(() => createConnection(username, phone), 2000);
+      if (connection === 'open') {
+        clearTimeout(timeout);
+        resolve();
       }
+
+      if (connection === 'close') {
+        const code = lastDisconnect?.error instanceof Boom
+          ? lastDisconnect.error.output.statusCode
+          : 0;
+
+        sessions.delete(username);
+
+        if (code !== DisconnectReason.loggedOut) {
+          console.log(`🔄 Reconnexion ${username}`);
+          setTimeout(() => createConnection(username, phone), 2000);
+        }
+
+        reject(new Error('Connection closed before pairing'));
+      }
+    });
+  });
+
+  // EVENTS pour messages (commandes)
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages?.[0];
+    if (!msg?.message || msg.key.fromMe) return;
+
+    const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+    if (!text || !text.startsWith('!')) return;
+
+    const [name, ...args] = text.slice(1).split(' ');
+    const cmd = commands.get(name.toLowerCase());
+    if (!cmd) return;
+
+    try {
+      await cmd.execute(sock, msg, args);
+    } catch (e) {
+      console.error('❌ CMD ERROR', e);
     }
   });
 
@@ -171,6 +215,8 @@ app.post('/pairing', async (req,res)=>{
 /* ======================
    START SERVER
 ====================== */
+await loadCommands();
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, ()=>console.log(`🔥 RAIZEL-XMD backend actif sur ${PORT}`));
 
