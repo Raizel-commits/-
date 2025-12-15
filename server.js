@@ -1,11 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import { Boom } from '@hapi/boom'
-import makeWASocket, {
-  useMultiFileAuthState,
-  DisconnectReason,
-  fetchLatestBaileysVersion
-} from '@whiskeysockets/baileys'
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys'
 import pino from 'pino'
 import fs from 'fs-extra'
 import path from 'path'
