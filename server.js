@@ -4,7 +4,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs-extra';
 import pino from 'pino';
-import chalk from 'chalk';
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 
@@ -17,21 +16,6 @@ app.use(express.json());
 
 // Stockage en mémoire
 const sessions = new Map();
-const commands = new Map();
-
-// --- Charger les commandes ---
-async function loadCommands() {
-  const cmdPath = path.join(__dirname, 'commands');
-  if (!await fs.pathExists(cmdPath)) return;
-
-  const files = await fs.readdir(cmdPath);
-  for (const file of files) {
-    if (!file.endsWith('.js')) continue;
-    const { default: cmd } = await import(`./commands/${file}`);
-    commands.set(cmd.name.toLowerCase(), cmd);
-    console.log('✅ Commande chargée:', cmd.name);
-  }
-}
 
 // --- Créer une connexion WhatsApp ---
 async function createConnection(username, phone) {
@@ -55,8 +39,9 @@ async function createConnection(username, phone) {
   sessions.set(username, sock);
   sock.ev.on('creds.update', saveCreds);
 
+  // Timeout 2 min pour le pairing
   await new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Timeout connection')), 90000);
+    const timeout = setTimeout(() => reject(new Error('Timeout connection')), 120000);
 
     sock.ev.on('connection.update', (update) => {
       console.log('🔌 Connection update:', JSON.stringify(update, null, 2));
@@ -86,30 +71,15 @@ async function createConnection(username, phone) {
     });
   });
 
-  sock.ev.on('messages.upsert', async ({ messages }) => {
-    const msg = messages?.[0];
-    if (!msg?.message || msg.key.fromMe) return;
-
-    const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
-    if (!text || !text.startsWith('!')) return;
-
-    const [name, ...args] = text.slice(1).split(' ');
-    const cmd = commands.get(name.toLowerCase());
-    if (!cmd) return;
-
-    try { await cmd.execute(sock, msg, args); }
-    catch (e) { console.error('❌ CMD ERROR', e); }
-  });
-
   return sock;
 }
 
-// --- ROUTE FRONTEND ---
+// --- FRONTEND ---
 app.get('/', (req,res)=>{
   res.sendFile(path.join(__dirname,'index.html'));
 });
 
-// --- ROUTE PAIRING ---
+// --- PAIRING ---
 app.post('/pairing', async (req,res)=>{
   const { username, phone } = req.body;
   if(!username || !phone) return res.json({error:'Champs manquants'});
@@ -134,7 +104,7 @@ app.post('/pairing', async (req,res)=>{
   }
 });
 
-// --- API TEST SEND MESSAGE ---
+// --- API send message ---
 app.post('/api/send', async (req,res)=>{
   const { username, target, message } = req.body;
   if(!username || !target || !message) return res.json({error:'Champs manquants'});
@@ -152,8 +122,7 @@ app.post('/api/send', async (req,res)=>{
   }
 });
 
-// --- Démarrage serveur ---
-await loadCommands();
+// --- START SERVER ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, ()=>console.log(`🔥 RAIZEL-XMD actif sur le port ${PORT}`));
 
