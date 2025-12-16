@@ -14,21 +14,11 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 8000;
 
+// Middleware
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
-
-// --- Import commands dynamiquement ---
-const commands = new Map();
-const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(f => f.endsWith('.js'));
-
-for (const file of commandFiles) {
-  const command = await import(`./commands/${file}`);
-  commands.set(command.default.name, command.default);
-}
-
-console.log(`📂 Commands loaded: ${[...commands.keys()].join(', ')}`);
 
 // Routes
 app.use('/qr', qrRouter);
@@ -38,6 +28,17 @@ app.get('/pair', (req, res) => res.sendFile(path.join(__dirname, 'pair.html')));
 app.get('/qrpage', (req, res) => res.sendFile(path.join(__dirname, 'qr.html')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
+// Chargement commandes
+const commands = new Map();
+const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(f => f.endsWith('.js'));
+for (const file of commandFiles) {
+  const command = await import(`./commands/${file}`);
+  commands.set(command.default.name.toLowerCase(), command.default);
+}
+
+console.log(`📂 Commands loaded: ${[...commands.keys()].join(', ')}`);
+
+// Lancement serveur
 app.listen(PORT, () => {
-  console.log(`🚀 RAIZEL-XMD running at http://localhost:${PORT}`);
+  console.log(`🚀 RAIZEL-XMD multi-user bot running at http://localhost:${PORT}`);
 });
