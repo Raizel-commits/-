@@ -1,8 +1,8 @@
 import express from 'express';
 import fs from 'fs-extra';
-import pino from 'pino';
 import QRCode from 'qrcode';
-import { makeWASocket, useMultiFileAuthState, makeCacheableSignalKeyStore, Browsers, fetchLatestBaileysVersion, delay } from '@whiskeysockets/baileys';
+import pino from 'pino';
+import { makeWASocket, useMultiFileAuthState, makeCacheableSignalKeyStore, Browsers, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import { exec } from 'child_process';
 
 const router = express.Router();
