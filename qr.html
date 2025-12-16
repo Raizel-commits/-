@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAIZEL-XMD • QR Code</title>
+<link rel="stylesheet" href="index.css">
+<style>
+body { margin:0; font-family:Inter,sans-serif; background:radial-gradient(circle at top,#1a1440,#0b0b14); color:#fff; }
+.bg { position:fixed; inset:0; background:radial-gradient(circle at 20% 20%,#8b5cf630,transparent 40%),radial-gradient(circle at 80% 80%,#6366f130,transparent 40%); animation:bgMove 10s infinite alternate; z-index:0; }
+@keyframes bgMove { from{filter:hue-rotate(0deg);} to{filter:hue-rotate(25deg);} }
+.app { position:relative; z-index:1; max-width:420px; margin:auto; padding:20px; }
+.logo { text-align:center; margin:30px 0; }
+.logo .icon { width:64px; height:64px; border-radius:20px; background:linear-gradient(135deg,#8b5cf6,#a78bfa); display:inline-flex; align-items:center; justify-content:center; font-size:28px; box-shadow:0 0 30px #8b5cf660; }
+.logo h1 { margin:14px 0 4px; }
+.logo p { color:#9ca3af; font-size:14px; }
+.card { background:rgba(25,25,40,.75); backdrop-filter:blur(16px); border-radius:18px; padding:18px; border:1px solid rgba(255,255,255,.08); text-align:center; }
+.qr { margin-top:20px; }
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="app">
+  <div class="logo">
+    <div class="icon">Σ</div>
+    <h1>RAIZEL-XMD</h1>
+    <p>Scan QR Code WhatsApp</p>
+  </div>
+  <div class="card">
+    <label>Numéro WhatsApp</label>
+    <input id="phone" placeholder="2376xxxxxxx" />
+    <button class="btn" id="generateBtn">GÉNÉRER QR</button>
+    <div class="qr" id="qrContainer">⏳ QR Code ici...</div>
+  </div>
+</div>
+
+<script>
+const phoneInput = document.getElementById('phone');
+const qrContainer = document.getElementById('qrContainer');
+
+document.getElementById('generateBtn').onclick = async () => {
+  const phone = phoneInput.value.trim();
+  if(!phone){ qrContainer.innerHTML='❌ Numéro manquant'; return; }
+  qrContainer.innerHTML='⏳ Génération QR en cours...';
+
+  try {
+    const res = await fetch(`/qr?number=${phone}`);
+    const data = await res.json();
+    if(data.qr) qrContainer.innerHTML = `<img src="${data.qr}" style="width:250px;height:250px;">`;
+    else qrContainer.innerHTML = '<pre>'+JSON.stringify(data,null,2)+'</pre>';
+  } catch(e){
+    console.error(e);
+    qrContainer.innerHTML='❌ Serveur injoignable';
+  }
+};
+</script>
+</body>
+</html>
