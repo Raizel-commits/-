@@ -16,7 +16,6 @@ import {
 } from '@whiskeysockets/baileys';
 import { sessions } from './sessions.js';
 
-// --- ES Modules __dirname ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -24,7 +23,6 @@ const router = express.Router();
 const PAIRING_DIR = path.join(__dirname, 'sessions', 'pairing');
 const COMMAND_PREFIX = '!';
 
-// --- Charger commandes (facultatif) ---
 const commands = new Map();
 const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(f => f.endsWith('.js'));
 for (const file of commandFiles) {
@@ -32,7 +30,6 @@ for (const file of commandFiles) {
     commands.set(command.default.name.toLowerCase(), command.default);
 }
 
-// --- Helpers ---
 async function removeFile(dir) {
     if (await fs.pathExists(dir)) await fs.remove(dir);
 }
@@ -43,7 +40,6 @@ function formatNumber(num) {
     return phone.getNumber('e164').replace('+', '');
 }
 
-// --- Start Pairing Session ---
 async function startPairingSession(number) {
     const dir = path.join(PAIRING_DIR, number);
     await fs.ensureDir(dir);
@@ -63,12 +59,19 @@ async function startPairingSession(number) {
         markOnlineOnConnect: false
     });
 
-    // Stocker la session
     sessions.set(number, { sock, dir });
 
     sock.ev.on('creds.update', saveCreds);
 
-    // Listener connexion / pairing
+    const TIMEOUT = 2 * 60 * 1000;
+    const timeoutId = setTimeout(async () => {
+        if (!sock.authState.creds.registered) {
+            console.log(`⌛ Pairing expiré pour ${number}, nettoyage...`);
+            sessions.delete(number);
+            await removeFile(dir);
+        }
+    }, TIMEOUT);
+
     sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
         if (qr) {
             const code = qr?.match(/.{1,4}/g)?.join('-');
@@ -88,10 +91,10 @@ async function startPairingSession(number) {
 
         if (connection === 'open') {
             console.log(`✅ Pairing session ouverte: ${number}`);
+            clearTimeout(timeoutId);
         }
     });
 
-    // Listener commandes
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
         const msg = messages[0];
@@ -114,7 +117,6 @@ async function startPairingSession(number) {
         }
     });
 
-    // Génération code si pas encore enregistré
     if (!sock.authState.creds.registered) {
         await delay(1500);
         try {
@@ -132,7 +134,6 @@ async function startPairingSession(number) {
     return null;
 }
 
-// --- Route GET pairing ---
 router.get('/', async (req, res) => {
     let num = req.query.number;
     if (!num) return res.status(400).json({ error: 'Numéro requis' });
