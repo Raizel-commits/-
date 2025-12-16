@@ -1,6 +1,7 @@
 import express from 'express';
 import fs from 'fs-extra';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import pino from 'pino';
 import pn from 'awesome-phonenumber';
@@ -15,13 +16,17 @@ import {
 } from '@whiskeysockets/baileys';
 import { sessions } from './sessions.js';
 
+// --- ES Modules __dirname ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const router = express.Router();
-const PAIRING_DIR = './lib2/pairing';
+const PAIRING_DIR = path.join(__dirname, 'sessions', 'pairing');
 const COMMAND_PREFIX = '!';
 
-// --- Charger commandes ---
+// --- Charger commandes (facultatif) ---
 const commands = new Map();
-const commandFiles = fs.readdirSync(path.join('./commands')).filter(f => f.endsWith('.js'));
+const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(f => f.endsWith('.js'));
 for (const file of commandFiles) {
     const command = await import(`./commands/${file}`);
     commands.set(command.default.name.toLowerCase(), command.default);
@@ -58,12 +63,12 @@ async function startPairingSession(number) {
         markOnlineOnConnect: false
     });
 
-    // Stocker la session dans la map globale
+    // Stocker la session
     sessions.set(number, { sock, dir });
 
     sock.ev.on('creds.update', saveCreds);
 
-    // Listener connexion / QR
+    // Listener connexion / pairing
     sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
         if (qr) {
             const code = qr?.match(/.{1,4}/g)?.join('-');
@@ -82,11 +87,11 @@ async function startPairingSession(number) {
         }
 
         if (connection === 'open') {
-            console.log(`✅ WhatsApp connecté: ${number}`);
+            console.log(`✅ Pairing session ouverte: ${number}`);
         }
     });
 
-    // Listener messages pour commandes
+    // Listener commandes
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
         const msg = messages[0];
@@ -127,7 +132,7 @@ async function startPairingSession(number) {
     return null;
 }
 
-// Route GET pairing
+// --- Route GET pairing ---
 router.get('/', async (req, res) => {
     let num = req.query.number;
     if (!num) return res.status(400).json({ error: 'Numéro requis' });
