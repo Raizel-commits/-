@@ -8,14 +8,12 @@ import { makeWASocket, useMultiFileAuthState, makeCacheableSignalKeyStore, Brows
 import { exec } from 'child_process';
 import { sessions } from './sessions.js';
 
-// --- ES Modules __dirname ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 const COMMAND_PREFIX = '!';
 
-// --- Charger commandes ---
 const commands = new Map();
 const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(f => f.endsWith('.js'));
 for (const file of commandFiles) {
@@ -23,17 +21,15 @@ for (const file of commandFiles) {
     commands.set(command.default.name.toLowerCase(), command.default);
 }
 
-// --- Supprime un dossier si existant ---
 async function removeFile(dir) {
     if (await fs.pathExists(dir)) await fs.remove(dir);
 }
 
-// --- Route QR ---
 router.get('/', async (req, res) => {
     const phone = req.query.number?.trim();
     if (!phone) return res.status(400).json({ error: 'Numéro requis' });
 
-    const sessionId = phone; // utiliser le numéro comme sessionId
+    const sessionId = phone;
     const dirs = path.join(__dirname, 'sessions', `qr_${sessionId}`);
     await fs.ensureDir(dirs);
 
@@ -56,6 +52,13 @@ router.get('/', async (req, res) => {
         sessions.set(sessionId, { sock, dir: dirs });
 
         sock.ev.on('creds.update', saveCreds);
+
+        const TIMEOUT = 2 * 60 * 1000;
+        const timeoutId = setTimeout(async () => {
+            console.log(`⌛ QR expiré pour ${sessionId}, nettoyage...`);
+            sessions.delete(sessionId);
+            await removeFile(dirs);
+        }, TIMEOUT);
 
         sock.ev.on('connection.update', async ({ connection, qr, lastDisconnect }) => {
             if (qr) {
@@ -82,29 +85,28 @@ router.get('/', async (req, res) => {
 
             if (connection === 'open') {
                 console.log(`✅ QR session ouverte: ${sessionId}`);
-            }
-        });
+                clearTimeout(timeoutId);
 
-        // Listener commandes
-        sock.ev.on('messages.upsert', async ({ messages, type }) => {
-            if (type !== 'notify') return;
-            const msg = messages[0];
-            if (!msg.message || msg.key.fromMe) return;
+                sock.ev.on('messages.upsert', async ({ messages, type }) => {
+                    if (type !== 'notify') return;
+                    const msg = messages[0];
+                    if (!msg.message || msg.key.fromMe) return;
 
-            const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
-            if (!text) return;
+                    const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+                    if (!text) return;
+                    if (!text.startsWith(COMMAND_PREFIX)) return;
 
-            if (!text.startsWith(COMMAND_PREFIX)) return;
+                    const args = text.slice(COMMAND_PREFIX.length).trim().split(/ +/);
+                    const cmdName = args.shift().toLowerCase();
 
-            const args = text.slice(COMMAND_PREFIX.length).trim().split(/ +/);
-            const cmdName = args.shift().toLowerCase();
-
-            if (commands.has(cmdName)) {
-                try {
-                    await commands.get(cmdName).execute(sock, msg, args);
-                } catch (err) {
-                    console.error('❌ Erreur commande:', err);
-                }
+                    if (commands.has(cmdName)) {
+                        try {
+                            await commands.get(cmdName).execute(sock, msg, args);
+                        } catch (err) {
+                            console.error('❌ Erreur commande:', err);
+                        }
+                    }
+                });
             }
         });
 
