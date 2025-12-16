@@ -1,27 +1,21 @@
+import fs from 'fs';
+import path from 'path';
+
 export default {
     name: 'menu',
-    description: 'Affiche le menu des commandes disponibles',
+    description: 'Affiche le menu des commandes',
     execute: async (sock, msg, args) => {
-        try {
-            const menuText = `
+        const commandFiles = fs.readdirSync(path.join('./commands')).filter(f => f.endsWith('.js'));
+        const cmds = commandFiles.map(f => f.replace('.js', '')).join('\n');
+
+        const menuText = `
 📜 *RAIZEL XMD - Menu des commandes*
 
-1️⃣ !ping - Vérifie si le bot répond
-2️⃣ !hello - Salutation du bot
-3️⃣ !menu - Affiche ce menu
-4️⃣ !info - Infos sur le bot
+${cmds.split('\n').map((c,i)=>`${i+1}️⃣ !${c}`).join('\n')}
 
 💡 Pour utiliser une commande, tape-la avec le préfixe !
 Exemple : !ping
-            `;
-
-            await sock.sendMessage(msg.key.remoteJid, { 
-                text: menuText, 
-                // Pour WhatsApp Markdown
-                // 'text' accepte déjà les *gras* et _italique_  
-            });
-        } catch (err) {
-            console.error('Erreur menu command:', err);
-        }
+        `;
+        await sock.sendMessage(msg.key.remoteJid, { text: menuText });
     }
 };
