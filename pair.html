@@ -3,63 +3,118 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RAIZEL-XMD • Pairing Code</title>
-<link rel="stylesheet" href="index.css">
+<title>RAIZEL XMD • Pairing Code</title>
+
 <style>
-body { margin:0; font-family:Inter,sans-serif; background:radial-gradient(circle at top,#1a1440,#0b0b14); color:#fff; }
-.bg { position:fixed; inset:0; background:radial-gradient(circle at 20% 20%,#8b5cf630,transparent 40%),radial-gradient(circle at 80% 80%,#6366f130,transparent 40%); animation:bgMove 10s infinite alternate; z-index:0; }
-@keyframes bgMove { from{filter:hue-rotate(0deg);} to{filter:hue-rotate(25deg);} }
-.app { position:relative; z-index:1; max-width:420px; margin:auto; padding:20px; }
-.logo { text-align:center; margin:30px 0; }
-.logo .icon { width:64px; height:64px; border-radius:20px; background:linear-gradient(135deg,#8b5cf6,#a78bfa); display:inline-flex; align-items:center; justify-content:center; font-size:28px; box-shadow:0 0 30px #8b5cf660; }
-.logo h1 { margin:14px 0 4px; }
-.logo p { color:#9ca3af; font-size:14px; }
-.card { background:rgba(25,25,40,.75); backdrop-filter:blur(16px); border-radius:18px; padding:18px; border:1px solid rgba(255,255,255,.08); }
-label { font-size:12px; color:#9ca3af; }
-input { width:100%; padding:14px; border-radius:12px; border:none; margin-top:6px; margin-bottom:14px; background:#0f0f1e; color:white; }
-.btn { width:100%; padding:14px; border-radius:14px; border:none; background:linear-gradient(135deg,#8b5cf6,#a78bfa); color:white; font-weight:700; cursor:pointer; box-shadow:0 0 20px #8b5cf660; }
-.result { text-align:center; margin-top:14px; }
-.code { font-size:26px; letter-spacing:6px; color:#22c55e; }
+:root{
+ --glass:rgba(255,255,255,.10);
+ --primary:#1db954;
+ --secondary:#9333ea;
+ --text:#fff;
+ --muted:#b3b3b3;
+}
+
+*{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto}
+body{margin:0;background:#000;color:var(--text);overflow:hidden}
+
+canvas{position:fixed;inset:0;z-index:-2}
+.overlay{
+ position:fixed;inset:0;z-index:-1;
+ background:
+ radial-gradient(circle at 30% 30%,#1db95430,transparent 40%),
+ radial-gradient(circle at 70% 70%,#9333ea30,transparent 45%);
+}
+
+.app{max-width:480px;margin:auto;padding:30px 20px}
+.logo{text-align:center;margin-bottom:25px}
+.logo p{color:var(--muted)}
+
+.card{
+ background:var(--glass);
+ backdrop-filter:blur(20px);
+ border-radius:22px;
+ padding:20px;
+ margin-bottom:20px;
+ border:1px solid rgba(255,255,255,.15);
+}
+
+label{font-size:12px;color:var(--muted)}
+input{
+ width:100%;padding:14px;border-radius:14px;border:none;
+ background:#00000055;color:white;margin:8px 0 14px;
+}
+
+.btn{
+ width:100%;padding:15px;border-radius:16px;
+ background:linear-gradient(135deg,var(--primary),#22c55e);
+ color:#000;font-weight:800;border:none;
+}
+
+.result{text-align:center;margin-top:14px;font-weight:700}
+.code{font-size:26px;letter-spacing:6px;color:#22c55e}
+
+.footer{text-align:center;font-size:12px;color:var(--muted)}
+a{color:var(--primary);text-decoration:none}
 </style>
 </head>
+
 <body>
-<div class="bg"></div>
+<canvas id="bg"></canvas>
+<div class="overlay"></div>
+
 <div class="app">
-  <div class="logo">
-    <div class="icon">Σ</div>
-    <h1>RAIZEL-XMD</h1>
-    <p>Obtenir votre Pairing Code</p>
-  </div>
-  <div class="card">
-    <label>Numéro WhatsApp</label>
-    <input id="phone" placeholder="2376xxxxxxx" />
-    <label>Nom du bot</label>
-    <input id="username" placeholder="monbot" />
-    <button class="btn" id="generateBtn">GÉNÉRER PAIRING CODE</button>
-    <div class="result" id="result"></div>
-  </div>
+ <div class="logo">
+  <h1>RAIZEL XMD</h1>
+  <p>Connexion WhatsApp par Pairing Code</p>
+ </div>
+
+ <div class="card">
+  <p>1️⃣ Numéro WhatsApp (sans +)</p>
+  <p>2️⃣ Générer le code</p>
+  <p>3️⃣ WhatsApp → Appareils liés</p>
+  <p>4️⃣ Entrer le code</p>
+ </div>
+
+ <div class="card">
+  <label>Numéro WhatsApp</label>
+  <input id="phone" placeholder="2376XXXXXXX">
+  <label>Nom du bot</label>
+  <input id="user" placeholder="raizelbot">
+  <button class="btn" id="gen">GÉNÉRER</button>
+  <div class="result" id="res"></div>
+ </div>
+
+ <div class="footer">
+  © 2025 RAIZEL XMD • <a href="https://t.me/devraizel">Telegram</a>
+ </div>
 </div>
 
 <script>
-const phoneInput = document.getElementById('phone');
-const usernameInput = document.getElementById('username');
-const result = document.getElementById('result');
+const canvas=document.getElementById("bg"),ctx=canvas.getContext("2d");
+let w,h,p=[];
+function r(){w=canvas.width=innerWidth;h=canvas.height=innerHeight}
+r();onresize=r;
+for(let i=0;i<40;i++)p.push({x:Math.random()*w,y:Math.random()*h,dx:(Math.random()-.5),dy:(Math.random()-.5)});
+function a(){
+ ctx.clearRect(0,0,w,h);
+ p.forEach(e=>{
+  e.x+=e.dx;e.y+=e.dy;
+  if(e.x<0||e.x>w)e.dx*=-1;
+  if(e.y<0||e.y>h)e.dy*=-1;
+  ctx.fillStyle="rgba(29,185,84,.5)";
+  ctx.beginPath();ctx.arc(e.x,e.y,3,0,Math.PI*2);ctx.fill();
+ });
+ requestAnimationFrame(a);
+}a();
+addEventListener("pointerdown",()=>p.forEach(e=>{e.dx*=2;e.dy*=2}));
 
-document.getElementById('generateBtn').onclick = async () => {
-  const phone = phoneInput.value.trim();
-  const username = usernameInput.value.trim();
-  if(!phone || !username) { result.innerHTML='❌ Champs manquants'; return; }
-  result.innerHTML='⏳ Connexion en cours...';
-
-  try {
-    const res = await fetch(`/code?number=${phone}`);
-    const data = await res.json();
-    if(data.code) result.innerHTML='<div class="code">'+data.code+'</div>';
-    else result.innerHTML='<pre>'+JSON.stringify(data,null,2)+'</pre>';
-  } catch(e) {
-    console.error(e);
-    result.innerHTML='❌ Serveur injoignable';
-  }
+document.getElementById("gen").onclick=async()=>{
+ const phone=phone.value.trim(),res=document.getElementById("res");
+ if(!phone){res.innerHTML="❌ Numéro manquant";return}
+ res.innerHTML="⏳ Génération...";
+ const r=await fetch(`/code?number=${phone}`);
+ const d=await r.json();
+ res.innerHTML=d.code?`<div class="code">${d.code}</div>`:"❌ Erreur";
 };
 </script>
 </body>
