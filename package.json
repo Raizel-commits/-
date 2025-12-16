@@ -1,17 +1,28 @@
 {
   "name": "raizel-xmd",
   "version": "1.0.0",
+  "description": "RAIZEL-XMD • WhatsApp Multi-Bot Pairing Panel",
   "type": "module",
+  "main": "server.js",
+  "engines": { "node": ">=18.0.0" },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
+  "author": "RAIZEL TECH",
+  "license": "MIT",
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "^6.7.7",
-    "chalk": "^5.3.0",
+    "@whiskeysockets/baileys": "^6.7.21",
+    "awesome-phonenumber": "^5.9.0",
     "cors": "^2.8.5",
-    "express": "^5.2.1",
-    "fs-extra": "^11.0.0",
-    "pino": "^10.1.0"
+    "express": "^4.21.2",
+    "fs-extra": "^11.3.0",
+    "pino": "^9.5.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "phone": "3.1.55",
+    "body-parser": "^1.20.3",
+    "path": "^0.12.7"
   }
 }
