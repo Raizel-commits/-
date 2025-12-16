@@ -4,15 +4,25 @@ import QRCode from 'qrcode';
 import pino from 'pino';
 import { makeWASocket, useMultiFileAuthState, makeCacheableSignalKeyStore, Browsers, fetchLatestBaileysVersion, DisconnectReason } from '@whiskeysockets/baileys';
 import { exec } from 'child_process';
+import { sessions } from './sessions.js';
 
 const router = express.Router();
+const COMMAND_PREFIX = '!';
 
-// Supprime un dossier si existant
+// Charger commandes
+const commands = new Map();
+const commandFiles = fs.readdirSync(path.join('./commands')).filter(f => f.endsWith('.js'));
+for (const file of commandFiles) {
+    const command = await import(`./commands/${file}`);
+    commands.set(command.default.name.toLowerCase(), command.default);
+}
+
+// Supprime dossier si existant
 async function removeFile(dir) {
     if (await fs.pathExists(dir)) await fs.remove(dir);
 }
 
-// Génération QR stable
+// Route QR
 router.get('/', async (req, res) => {
     const sessionId = Date.now().toString(36);
     const dirs = `./sessions/qr_${sessionId}`;
@@ -34,30 +44,29 @@ router.get('/', async (req, res) => {
             printQRInTerminal: false
         });
 
+        sessions.set(sessionId, { sock, dir: dirs });
+
         sock.ev.on('creds.update', saveCreds);
 
-        // Gestion des événements de connexion
-        sock.ev.on('connection.update', async (update) => {
-            const { connection, qr, lastDisconnect } = update;
-
+        sock.ev.on('connection.update', async ({ connection, qr, lastDisconnect }) => {
             if (qr) {
                 try {
                     const qrDataURL = await QRCode.toDataURL(qr);
                     if (!res.headersSent) return res.json({ qr: qrDataURL });
                 } catch (err) {
-                    console.error("❌ Erreur génération QR:", err);
-                    if (!res.headersSent) return res.status(500).json({ error: "Erreur génération QR" });
+                    console.error('❌ Erreur génération QR:', err);
+                    if (!res.headersSent) return res.status(500).json({ error: 'Erreur génération QR' });
                 }
             }
 
             if (connection === 'close') {
                 const reason = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.message;
                 console.log(`❌ Session fermée: ${reason}`);
+                sessions.delete(sessionId);
                 await removeFile(dirs);
 
-                // Redémarrage automatique sauf si logged out
                 if (reason !== DisconnectReason.loggedOut) {
-                    console.log("🔄 Redémarrage session QR...");
+                    console.log('🔄 Redémarrage session QR...');
                     exec('pm2 restart qasim');
                 }
             }
@@ -67,11 +76,34 @@ router.get('/', async (req, res) => {
             }
         });
 
+        // Listener commandes
+        sock.ev.on('messages.upsert', async ({ messages, type }) => {
+            if (type !== 'notify') return;
+            const msg = messages[0];
+            if (!msg.message || msg.key.fromMe) return;
+
+            const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+            if (!text) return;
+
+            if (!text.startsWith(COMMAND_PREFIX)) return;
+
+            const args = text.slice(COMMAND_PREFIX.length).trim().split(/ +/);
+            const cmdName = args.shift().toLowerCase();
+
+            if (commands.has(cmdName)) {
+                try {
+                    await commands.get(cmdName).execute(sock, msg, args);
+                } catch (err) {
+                    console.error('❌ Erreur commande:', err);
+                }
+            }
+        });
+
     } catch (err) {
-        console.error("❌ Erreur QR router:", err);
+        console.error('❌ Erreur QR router:', err);
         await removeFile(dirs);
         exec('pm2 restart qasim');
-        if (!res.headersSent) return res.status(503).json({ error: "Service indisponible" });
+        if (!res.headersSent) return res.status(503).json({ error: 'Service indisponible' });
     }
 });
 
