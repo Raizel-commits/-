@@ -1,31 +1,40 @@
 import express from 'express';
 import fs from 'fs-extra';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import QRCode from 'qrcode';
 import pino from 'pino';
 import { makeWASocket, useMultiFileAuthState, makeCacheableSignalKeyStore, Browsers, fetchLatestBaileysVersion, DisconnectReason } from '@whiskeysockets/baileys';
 import { exec } from 'child_process';
 import { sessions } from './sessions.js';
 
+// --- ES Modules __dirname ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const router = express.Router();
 const COMMAND_PREFIX = '!';
 
-// Charger commandes
+// --- Charger commandes ---
 const commands = new Map();
-const commandFiles = fs.readdirSync(path.join('./commands')).filter(f => f.endsWith('.js'));
+const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(f => f.endsWith('.js'));
 for (const file of commandFiles) {
     const command = await import(`./commands/${file}`);
     commands.set(command.default.name.toLowerCase(), command.default);
 }
 
-// Supprime dossier si existant
+// --- Supprime un dossier si existant ---
 async function removeFile(dir) {
     if (await fs.pathExists(dir)) await fs.remove(dir);
 }
 
-// Route QR
+// --- Route QR ---
 router.get('/', async (req, res) => {
-    const sessionId = Date.now().toString(36);
-    const dirs = `./sessions/qr_${sessionId}`;
+    const phone = req.query.number?.trim();
+    if (!phone) return res.status(400).json({ error: 'Numéro requis' });
+
+    const sessionId = phone; // utiliser le numéro comme sessionId
+    const dirs = path.join(__dirname, 'sessions', `qr_${sessionId}`);
     await fs.ensureDir(dirs);
 
     try {
