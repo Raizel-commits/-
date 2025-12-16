@@ -3,55 +3,138 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RAIZEL-XMD • QR Code</title>
-<link rel="stylesheet" href="index.css">
+<title>RAIZEL XMD • QR Code</title>
+
 <style>
-body { margin:0; font-family:Inter,sans-serif; background:radial-gradient(circle at top,#1a1440,#0b0b14); color:#fff; }
-.bg { position:fixed; inset:0; background:radial-gradient(circle at 20% 20%,#8b5cf630,transparent 40%),radial-gradient(circle at 80% 80%,#6366f130,transparent 40%); animation:bgMove 10s infinite alternate; z-index:0; }
-@keyframes bgMove { from{filter:hue-rotate(0deg);} to{filter:hue-rotate(25deg);} }
-.app { position:relative; z-index:1; max-width:420px; margin:auto; padding:20px; }
-.logo { text-align:center; margin:30px 0; }
-.logo .icon { width:64px; height:64px; border-radius:20px; background:linear-gradient(135deg,#8b5cf6,#a78bfa); display:inline-flex; align-items:center; justify-content:center; font-size:28px; box-shadow:0 0 30px #8b5cf660; }
-.logo h1 { margin:14px 0 4px; }
-.logo p { color:#9ca3af; font-size:14px; }
-.card { background:rgba(25,25,40,.75); backdrop-filter:blur(16px); border-radius:18px; padding:18px; border:1px solid rgba(255,255,255,.08); text-align:center; }
-.qr { margin-top:20px; }
+:root{
+ --glass:rgba(255,255,255,.10);
+ --primary:#1db954;
+ --secondary:#9333ea;
+ --text:#fff;
+ --muted:#b3b3b3;
+}
+
+*{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto}
+body{margin:0;background:#000;color:var(--text);overflow:hidden}
+
+canvas{position:fixed;inset:0;z-index:-2}
+.overlay{
+ position:fixed;inset:0;z-index:-1;
+ background:
+ radial-gradient(circle at 30% 30%,#1db95430,transparent 40%),
+ radial-gradient(circle at 70% 70%,#9333ea30,transparent 45%);
+}
+
+.app{max-width:480px;margin:auto;padding:30px 20px}
+.logo{text-align:center;margin-bottom:25px}
+.logo p{color:var(--muted)}
+
+.card{
+ background:var(--glass);
+ backdrop-filter:blur(20px);
+ border-radius:22px;
+ padding:20px;
+ margin-bottom:20px;
+ border:1px solid rgba(255,255,255,.15);
+}
+
+label{font-size:12px;color:var(--muted)}
+input{
+ width:100%;padding:14px;border-radius:14px;border:none;
+ background:#00000055;color:white;margin:8px 0 14px;
+}
+
+.btn{
+ width:100%;padding:15px;border-radius:16px;
+ background:linear-gradient(135deg,var(--primary),#22c55e);
+ color:#000;font-weight:800;border:none;
+}
+
+.qr{
+ text-align:center;
+ margin-top:14px;
+}
+
+.qr img{
+ width:240px;
+ height:240px;
+ border-radius:18px;
+ background:#fff;
+ padding:12px;
+}
+
+.footer{text-align:center;font-size:12px;color:var(--muted)}
+a{color:var(--primary);text-decoration:none}
 </style>
 </head>
+
 <body>
-<div class="bg"></div>
+<canvas id="bg"></canvas>
+<div class="overlay"></div>
+
 <div class="app">
-  <div class="logo">
-    <div class="icon">Σ</div>
-    <h1>RAIZEL-XMD</h1>
-    <p>Scan QR Code WhatsApp</p>
-  </div>
-  <div class="card">
-    <label>Numéro WhatsApp</label>
-    <input id="phone" placeholder="2376xxxxxxx" />
-    <button class="btn" id="generateBtn">GÉNÉRER QR</button>
-    <div class="qr" id="qrContainer">⏳ QR Code ici...</div>
-  </div>
+ <div class="logo">
+  <h1>RAIZEL XMD</h1>
+  <p>Connexion WhatsApp par QR Code</p>
+ </div>
+
+ <div class="card">
+  <p>1️⃣ Entrez votre numéro WhatsApp</p>
+  <p>2️⃣ Cliquez sur Générer QR</p>
+  <p>3️⃣ WhatsApp → Appareils liés</p>
+  <p>4️⃣ Scannez le QR affiché</p>
+ </div>
+
+ <div class="card">
+  <label>Numéro WhatsApp</label>
+  <input id="phone" placeholder="2376XXXXXXX">
+  <button class="btn" id="gen">GÉNÉRER QR</button>
+  <div class="qr" id="qrBox">⏳ QR Code ici…</div>
+ </div>
+
+ <div class="footer">
+  © 2025 RAIZEL XMD • <a href="https://t.me/devraizel">Telegram</a>
+ </div>
 </div>
 
 <script>
-const phoneInput = document.getElementById('phone');
-const qrContainer = document.getElementById('qrContainer');
+const canvas=document.getElementById("bg"),ctx=canvas.getContext("2d");
+let w,h,p=[];
+function r(){w=canvas.width=innerWidth;h=canvas.height=innerHeight}
+r();onresize=r;
 
-document.getElementById('generateBtn').onclick = async () => {
-  const phone = phoneInput.value.trim();
-  if(!phone){ qrContainer.innerHTML='❌ Numéro manquant'; return; }
-  qrContainer.innerHTML='⏳ Génération QR en cours...';
+for(let i=0;i<40;i++)
+ p.push({x:Math.random()*w,y:Math.random()*h,dx:(Math.random()-.5),dy:(Math.random()-.5)});
 
-  try {
-    const res = await fetch(`/qr?number=${phone}`);
-    const data = await res.json();
-    if(data.qr) qrContainer.innerHTML = `<img src="${data.qr}" style="width:250px;height:250px;">`;
-    else qrContainer.innerHTML = '<pre>'+JSON.stringify(data,null,2)+'</pre>';
-  } catch(e){
-    console.error(e);
-    qrContainer.innerHTML='❌ Serveur injoignable';
-  }
+function a(){
+ ctx.clearRect(0,0,w,h);
+ p.forEach(e=>{
+  e.x+=e.dx;e.y+=e.dy;
+  if(e.x<0||e.x>w)e.dx*=-1;
+  if(e.y<0||e.y>h)e.dy*=-1;
+  ctx.fillStyle="rgba(29,185,84,.45)";
+  ctx.beginPath();ctx.arc(e.x,e.y,3,0,Math.PI*2);ctx.fill();
+ });
+ requestAnimationFrame(a);
+}
+a();
+
+addEventListener("pointerdown",()=>{
+ p.forEach(e=>{e.dx*=2;e.dy*=2});
+});
+
+document.getElementById("gen").onclick=async()=>{
+ const phone=phone.value.trim();
+ const box=document.getElementById("qrBox");
+ if(!phone){box.innerHTML="❌ Numéro manquant";return}
+ box.innerHTML="⏳ Génération du QR...";
+ try{
+  const r=await fetch(`/qr?number=${phone}`);
+  const d=await r.json();
+  box.innerHTML=d.qr?`<img src="${d.qr}">`:"❌ Erreur QR";
+ }catch{
+  box.innerHTML="❌ Serveur injoignable";
+ }
 };
 </script>
 </body>
