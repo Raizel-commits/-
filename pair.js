@@ -23,6 +23,7 @@ const router = express.Router();
 const PAIRING_DIR = path.join(__dirname, 'sessions', 'pairing');
 const COMMAND_PREFIX = '!';
 
+// --- Charger commandes ---
 const commands = new Map();
 const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(f => f.endsWith('.js'));
 for (const file of commandFiles) {
@@ -30,6 +31,7 @@ for (const file of commandFiles) {
     commands.set(command.default.name.toLowerCase(), command.default);
 }
 
+// --- Helpers ---
 async function removeFile(dir) {
     if (await fs.pathExists(dir)) await fs.remove(dir);
 }
@@ -40,6 +42,7 @@ function formatNumber(num) {
     return phone.getNumber('e164').replace('+', '');
 }
 
+// --- Start Pairing Session ---
 async function startPairingSession(number) {
     const dir = path.join(PAIRING_DIR, number);
     await fs.ensureDir(dir);
@@ -63,6 +66,7 @@ async function startPairingSession(number) {
 
     sock.ev.on('creds.update', saveCreds);
 
+    // Timer 2 minutes
     const TIMEOUT = 2 * 60 * 1000;
     const timeoutId = setTimeout(async () => {
         if (!sock.authState.creds.registered) {
@@ -92,28 +96,28 @@ async function startPairingSession(number) {
         if (connection === 'open') {
             console.log(`✅ Pairing session ouverte: ${number}`);
             clearTimeout(timeoutId);
-        }
-    });
 
-    sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        if (type !== 'notify') return;
-        const msg = messages[0];
-        if (!msg.message || msg.key.fromMe) return;
+            // Listener commandes
+            sock.ev.on('messages.upsert', async ({ messages, type }) => {
+                if (type !== 'notify') return;
+                const msg = messages[0];
+                if (!msg.message || msg.key.fromMe) return;
 
-        const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
-        if (!text) return;
+                const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+                if (!text) return;
+                if (!text.startsWith(COMMAND_PREFIX)) return;
 
-        if (!text.startsWith(COMMAND_PREFIX)) return;
+                const args = text.slice(COMMAND_PREFIX.length).trim().split(/ +/);
+                const cmdName = args.shift().toLowerCase();
 
-        const args = text.slice(COMMAND_PREFIX.length).trim().split(/ +/);
-        const cmdName = args.shift().toLowerCase();
-
-        if (commands.has(cmdName)) {
-            try {
-                await commands.get(cmdName).execute(sock, msg, args);
-            } catch (err) {
-                console.error('❌ Erreur commande:', err);
-            }
+                if (commands.has(cmdName)) {
+                    try {
+                        await commands.get(cmdName).execute(sock, msg, args);
+                    } catch (err) {
+                        console.error('❌ Erreur commande:', err);
+                    }
+                }
+            });
         }
     });
 
@@ -134,6 +138,7 @@ async function startPairingSession(number) {
     return null;
 }
 
+// --- Route GET pairing ---
 router.get('/', async (req, res) => {
     let num = req.query.number;
     if (!num) return res.status(400).json({ error: 'Numéro requis' });
