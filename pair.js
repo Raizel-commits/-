@@ -3,7 +3,7 @@ import fs from 'fs-extra';
 import pn from 'awesome-phonenumber';
 import pino from 'pino';
 import { exec } from 'child_process';
-import { makeWASocket, useMultiFileAuthState, makeCacheableSignalKeyStore, Browsers, jidNormalizedUser, fetchLatestBaileysVersion, delay } from '@whiskeysockets/baileys';
+import { makeWASocket, useMultiFileAuthState, makeCacheableSignalKeyStore, Browsers, fetchLatestBaileysVersion, delay } from '@whiskeysockets/baileys';
 
 const router = express.Router();
 
