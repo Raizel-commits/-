@@ -18,7 +18,6 @@ import { sessions } from './sessions.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 const router = express.Router();
 const PAIRING_DIR = path.join(__dirname, 'sessions', 'pairing');
 const COMMAND_PREFIX = '!';
@@ -66,7 +65,7 @@ async function startPairingSession(number) {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // Timer 2 minutes
+    // Timer 2 minutes pour expirer si pas connecté
     const TIMEOUT = 2 * 60 * 1000;
     const timeoutId = setTimeout(async () => {
         if (!sock.authState.creds.registered) {
@@ -76,17 +75,17 @@ async function startPairingSession(number) {
         }
     }, TIMEOUT);
 
-    sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+    sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
         if (qr) {
             const code = qr?.match(/.{1,4}/g)?.join('-');
-            await fs.writeJSON(path.join(dir, 'pairing.json'), { code }, { spaces: 2 });
+            fs.writeJSON(path.join(dir, 'pairing.json'), { code }, { spaces: 2 });
         }
 
         if (connection === 'close') {
             const status = lastDisconnect?.error?.output?.statusCode;
             if (status === DisconnectReason.loggedOut) {
                 sessions.delete(number);
-                await removeFile(dir);
+                removeFile(dir);
             } else {
                 console.log('🔄 Redémarrage session...', number);
                 setTimeout(() => startPairingSession(number), 2000);
@@ -97,15 +96,14 @@ async function startPairingSession(number) {
             console.log(`✅ Pairing session ouverte: ${number}`);
             clearTimeout(timeoutId);
 
-            // Listener commandes
+            // Listener commandes après connexion
             sock.ev.on('messages.upsert', async ({ messages, type }) => {
                 if (type !== 'notify') return;
                 const msg = messages[0];
                 if (!msg.message || msg.key.fromMe) return;
 
                 const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
-                if (!text) return;
-                if (!text.startsWith(COMMAND_PREFIX)) return;
+                if (!text?.startsWith(COMMAND_PREFIX)) return;
 
                 const args = text.slice(COMMAND_PREFIX.length).trim().split(/ +/);
                 const cmdName = args.shift().toLowerCase();
