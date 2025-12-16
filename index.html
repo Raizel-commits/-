@@ -3,42 +3,217 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RAIZEL-XMD • Dashboard</title>
+<title>RAIZEL XMD • WhatsApp Bot</title>
+
 <style>
-:root { --bg:#0b0b14; --card:rgba(25,25,40,.75); --primary:#8b5cf6; --primary-glow:#a78bfa; --text:#fff; --muted:#9ca3af; }
-* { box-sizing:border-box; font-family:Inter,sans-serif; margin:0; padding:0; }
-body { background:radial-gradient(circle at top,#1a1440,var(--bg)); color:var(--text); overflow-x:hidden; }
-.bg { position:fixed; inset:0; background:radial-gradient(circle at 20% 20%,#8b5cf630,transparent 40%),radial-gradient(circle at 80% 80%,#6366f130,transparent 40%); animation:bgMove 10s infinite alternate; z-index:0; }
-@keyframes bgMove { from{filter:hue-rotate(0deg);} to{filter:hue-rotate(25deg);} }
-.app { position:relative; z-index:1; max-width:480px; margin:auto; padding:30px; text-align:center; }
-.logo { margin-bottom:30px; }
-.logo .icon { width:64px; height:64px; border-radius:20px; background:linear-gradient(135deg,var(--primary),var(--primary-glow)); display:inline-flex; align-items:center; justify-content:center; font-size:28px; box-shadow:0 0 30px var(--primary); }
-.logo h1 { margin:14px 0 6px; }
-.logo p { color:var(--muted); font-size:14px; }
-.card { background:var(--card); backdrop-filter:blur(16px); border-radius:18px; padding:25px; margin-bottom:20px; border:1px solid rgba(255,255,255,.08); }
-.btn { display:inline-block; margin:10px; padding:14px 28px; border:none; border-radius:14px; background:linear-gradient(135deg,var(--primary),var(--primary-glow)); color:#fff; font-weight:700; font-size:16px; cursor:pointer; transition:0.3s; text-decoration:none; }
-.btn:hover { transform:scale(1.05); box-shadow:0 0 25px var(--primary-glow); }
+:root{
+ --bg1:#05050a;
+ --bg2:#0b0b1a;
+ --glass:rgba(255,255,255,0.10);
+ --primary:#1db954;
+ --secondary:#9333ea;
+ --text:#ffffff;
+ --muted:#b3b3b3;
+}
+
+*{
+ box-sizing:border-box;
+ font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto;
+}
+
+body{
+ margin:0;
+ color:var(--text);
+ background:#000;
+ overflow:hidden;
+}
+
+/* ===== ANIMATED BACKGROUND ===== */
+canvas{
+ position:fixed;
+ inset:0;
+ z-index:-2;
+}
+
+.overlay{
+ position:fixed;
+ inset:0;
+ background:
+ radial-gradient(circle at 30% 30%,#1db95430,transparent 40%),
+ radial-gradient(circle at 70% 70%,#9333ea30,transparent 45%);
+ z-index:-1;
+ pointer-events:none;
+}
+
+/* ===== APP ===== */
+.app{
+ max-width:480px;
+ margin:auto;
+ padding:30px 20px;
+ position:relative;
+ z-index:1;
+}
+
+.logo{
+ text-align:center;
+ margin-bottom:30px;
+}
+
+.logo h1{
+ margin:12px 0 4px;
+ letter-spacing:2px;
+}
+
+.logo p{
+ color:var(--muted);
+ font-size:14px;
+}
+
+/* ===== GLASS CARD ===== */
+.card{
+ background:var(--glass);
+ backdrop-filter:blur(20px);
+ border-radius:22px;
+ padding:20px;
+ margin-bottom:20px;
+ border:1px solid rgba(255,255,255,0.15);
+ box-shadow:0 0 40px rgba(0,0,0,.4);
+}
+
+/* ===== BUTTON ===== */
+.btn{
+ display:block;
+ width:100%;
+ padding:15px;
+ margin-top:12px;
+ border-radius:16px;
+ background:linear-gradient(135deg,var(--primary),#22c55e);
+ color:#000;
+ font-weight:800;
+ border:none;
+ text-align:center;
+ text-decoration:none;
+ transition:.25s;
+}
+
+.btn:active{
+ transform:scale(.97);
+}
+
+/* ===== FOOTER ===== */
+.footer{
+ text-align:center;
+ color:var(--muted);
+ font-size:12px;
+ margin-top:30px;
+}
+
+a{
+ color:var(--primary);
+ text-decoration:none;
+ font-weight:600;
+}
 </style>
 </head>
+
 <body>
-<div class="bg"></div>
+
+<!-- BACKGROUND -->
+<canvas id="bg"></canvas>
+<div class="overlay"></div>
+
 <div class="app">
-  <div class="logo">
-    <div class="icon">Σ</div>
-    <h1>RAIZEL-XMD</h1>
-    <p>WhatsApp Multi-Bot Dashboard</p>
-  </div>
-  <div class="card">
-    <h2>Actions</h2>
-    <a href="/pair" class="btn">Générer Pairing Code</a>
-    <a href="/qrpage" class="btn">Scanner QR Code</a>
-  </div>
-  <div class="card">
-    <h2>Informations</h2>
-    <p>✅ Multi-bot compatible</p>
-    <p>🚀 Chargement rapide</p>
-    <p>🎛️ Commands intégrées automatiquement</p>
-  </div>
+
+ <div class="logo">
+   <h1>RAIZEL XMD</h1>
+   <p>Déployez votre bot WhatsApp en quelques clics</p>
+ </div>
+
+ <div class="card">
+  <p>👨‍💻 Contact développeur</p>
+  <p>
+   <a href="https://t.me/devraizel" target="_blank">
+    Telegram : @devraizel
+   </a>
+  </p>
+ </div>
+
+ <div class="card">
+  <a class="btn" href="pair.html">🔑 Pairing Code</a>
+  <a class="btn" href="qr.html">📷 QR Code</a>
+ </div>
+
+ <div class="card">
+  <h3>Comment ça marche</h3>
+  <p>1. Entrez votre numéro WhatsApp (sans +)</p>
+  <p>2. Choisissez un nom d’utilisateur</p>
+  <p>3. Un code de pairing sera généré</p>
+  <p>4. WhatsApp → Appareils liés</p>
+  <p>5. Entrez le code affiché</p>
+ </div>
+
+ <div class="card">
+  <p><strong>Bot :</strong> Raizel XMD</p>
+  <p><strong>Développé par :</strong> Raizel</p>
+  <p>💬 <a href="https://wa.me/237679064679">WhatsApp</a></p>
+  <p>💻 <a href="https://github.com/yhrespon/RAIZEXMD">GitHub</a></p>
+ </div>
+
+ <div class="footer">
+  © 2025 RAIZEL XMD • Développé par Raizel
+ </div>
+
 </div>
+
+<!-- ===== BACKGROUND ANIMATION SCRIPT ===== -->
+<script>
+const canvas = document.getElementById("bg");
+const ctx = canvas.getContext("2d");
+let w,h,particles=[];
+
+function resize(){
+ w = canvas.width = window.innerWidth;
+ h = canvas.height = window.innerHeight;
+}
+window.onresize = resize;
+resize();
+
+for(let i=0;i<40;i++){
+ particles.push({
+  x:Math.random()*w,
+  y:Math.random()*h,
+  r:2+Math.random()*3,
+  dx:(Math.random()-.5)*0.6,
+  dy:(Math.random()-.5)*0.6
+ });
+}
+
+function draw(){
+ ctx.clearRect(0,0,w,h);
+ particles.forEach(p=>{
+  p.x+=p.dx;
+  p.y+=p.dy;
+
+  if(p.x<0||p.x>w) p.dx*=-1;
+  if(p.y<0||p.y>h) p.dy*=-1;
+
+  ctx.beginPath();
+  ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+  ctx.fillStyle="rgba(29,185,84,0.5)";
+  ctx.fill();
+ });
+ requestAnimationFrame(draw);
+}
+draw();
+
+/* TOUCH / CLICK REACTION */
+window.addEventListener("pointerdown",e=>{
+ particles.forEach(p=>{
+  p.dx += (Math.random()-.5)*2;
+  p.dy += (Math.random()-.5)*2;
+ });
+});
+</script>
+
 </body>
 </html>
