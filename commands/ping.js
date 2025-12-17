@@ -1,12 +1,8 @@
-export default {
-    name: 'ping',           // Commande : !ping
-    description: 'Répond pong',
-    execute: async (sock, msg, args) => {
-        try {
-            // Envoi "Pong !" au chat d'où vient le message
-            await sock.sendMessage(msg.key.remoteJid, { text: 'Pong ! 🏓' });
-        } catch (err) {
-            console.error('Erreur ping command:', err);
-        }
-    }
-};
+// commands/ping.js
+export const name = "ping";                // Nom de la commande
+export const description = "Répond Pong";  // Description (optionnelle)
+
+export async function execute(sock, msg, args) {
+    const jid = msg.key.remoteJid;        // ID du chat où envoyer la réponse
+    await sock.sendMessage(jid, { text: "Pong 🏓" });
+}
