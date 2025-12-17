@@ -4,26 +4,25 @@ import path from "path";
 import pino from "pino";
 import pn from "awesome-phonenumber";
 import { exec } from "child_process";
+
 import {
     makeWASocket,
     useMultiFileAuthState,
+    makeCacheableSignalKeyStore,
     Browsers,
     fetchLatestBaileysVersion,
     DisconnectReason,
-    delay,
-    makeCacheableSignalKeyStore
+    delay
 } from "@whiskeysockets/baileys";
 
 import { addAllowed, removeAllowed, isAllowed } from "./lib/allowed.js";
 
 const router = express.Router();
-const PAIR_DIR = "./lib2/pairing";
+const PAIR_DIR = "./sessions/pair";
 
-function formatNumber(num) {
-    const phone = pn("+" + num.replace(/\D/g, ""));
-    if (!phone.isValid()) throw new Error("Numéro invalide");
-    return phone.getNumber("e164").replace("+", "");
-}
+// helpers
+const formatNumber = num =>
+    pn("+" + num.replace(/\D/g, "")).getNumber("e164").replace("+", "");
 
 async function loadCommands() {
     const cmds = new Map();
@@ -36,76 +35,87 @@ async function loadCommands() {
 }
 
 router.get("/", async (req, res) => {
-    if (!req.query.number) return res.status(400).json({ error: "Numéro requis" });
+    if (!req.query.number)
+        return res.status(400).json({ error: "Numéro requis" });
 
     const number = formatNumber(req.query.number);
     const dir = path.join(PAIR_DIR, number);
     await fs.ensureDir(dir);
 
-    const { state, saveCreds } = await useMultiFileAuthState(dir);
-    const { version } = await fetchLatestBaileysVersion();
+    try {
+        const { state, saveCreds } = await useMultiFileAuthState(dir);
+        const { version } = await fetchLatestBaileysVersion();
 
-    const sock = makeWASocket({
-        version,
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
-        },
-        logger: pino({ level: "silent" }),
-        browser: Browsers.windows("Chrome"),
-        printQRInTerminal: false
-    });
+        const sock = makeWASocket({
+            version,
+            auth: {
+                creds: state.creds,
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
+            },
+            browser: Browsers.windows("Chrome"),
+            logger: pino({ level: "silent" }),
+            printQRInTerminal: false
+        });
 
-    sock.ev.on("creds.update", saveCreds);
+        sock.ev.on("creds.update", saveCreds);
 
-    const commands = await loadCommands();
+        const commands = await loadCommands();
 
-    sock.ev.on("messages.upsert", async ({ messages }) => {
-        const msg = messages[0];
-        if (!msg?.message) return;
+        // COMMANDES
+        sock.ev.on("messages.upsert", async ({ messages }) => {
+            const msg = messages[0];
+            if (!msg?.message) return;
 
-        const jid = msg.key.remoteJid;
-        const botNumber = sock.user?.id?.split(":")[0];
+            const sender =
+                msg.key.participant || msg.key.remoteJid;
+            const senderNum = sender.split("@")[0];
 
-        if (!(await isAllowed(jid, botNumber))) return;
+            if (!(await isAllowed(senderNum))) return;
 
-        const text =
-            msg.message.conversation ||
-            msg.message.extendedTextMessage?.text ||
-            msg.message.imageMessage?.caption ||
-            msg.message.videoMessage?.caption ||
-            "";
+            const text =
+                msg.message.conversation ||
+                msg.message.extendedTextMessage?.text ||
+                msg.message.imageMessage?.caption ||
+                msg.message.videoMessage?.caption ||
+                "";
 
-        if (!text.startsWith("!")) return;
+            if (!text.startsWith("!")) return;
 
-        const args = text.slice(1).split(" ");
-        const cmd = commands.get(args.shift().toLowerCase());
-        if (cmd) cmd.execute(sock, msg, args, commands);
-    });
+            const args = text.slice(1).trim().split(/ +/);
+            const cmd = args.shift().toLowerCase();
 
-    sock.ev.on("connection.update", async ({ connection, lastDisconnect }) => {
-        if (connection === "open") {
-            const botNumber = sock.user.id.split(":")[0];
-            await addAllowed(botNumber);
-            console.log("✅ Pairing connecté :", botNumber);
-            res.json({ status: "connecté" });
-        }
-
-        if (connection === "close") {
-            const reason = lastDisconnect?.error?.output?.statusCode;
-            const botNumber = sock.user?.id?.split(":")[0];
-
-            if (reason === DisconnectReason.loggedOut) {
-                await fs.remove(dir);
-                if (botNumber) await removeAllowed(botNumber);
+            if (commands.has(cmd)) {
+                await commands.get(cmd).execute(sock, msg, args, commands);
             }
-        }
-    });
+        });
 
-    if (!sock.authState.creds.registered) {
-        await delay(1500);
-        const code = await sock.requestPairingCode(number);
-        res.json({ code });
+        sock.ev.on("connection.update", async ({ connection, lastDisconnect }) => {
+            if (connection === "open") {
+                const botNum = sock.user.id.split(":")[0];
+                await addAllowed(botNum);
+                console.log("✅ BOT AUTORISÉ :", botNum);
+            }
+
+            if (connection === "close") {
+                const reason = lastDisconnect?.error?.output?.statusCode;
+                if (reason === DisconnectReason.loggedOut) {
+                    await removeAllowed(number);
+                    await fs.remove(dir);
+                }
+            }
+        });
+
+        if (!sock.authState.creds.registered) {
+            await delay(1000);
+            const code = await sock.requestPairingCode(number);
+            return res.json({ code });
+        }
+
+        res.json({ status: "Déjà connecté" });
+
+    } catch (e) {
+        exec("pm2 restart qasim");
+        res.status(500).json({ error: e.message });
     }
 });
 
