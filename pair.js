@@ -1,26 +1,29 @@
 import express from "express";
 import fs from "fs-extra";
+import path from "path";
 import pino from "pino";
 import pn from "awesome-phonenumber";
-import path from "path";
 import chalk from "chalk";
 import { exec } from "child_process";
 import {
     makeWASocket,
     useMultiFileAuthState,
     Browsers,
-    fetchLatestBaileysVersion,
     DisconnectReason,
     makeCacheableSignalKeyStore,
     delay
 } from "@whiskeysockets/baileys";
 
-const router = express.Router();
-const PAIRING_DIR = "./lib2/pairing";
+// ===== Import Baileys version JSON =====
+const baileysVersionPath = path.resolve('./baileys-version.json');
+const defaultVersion = JSON.parse(fs.readFileSync(baileysVersionPath, 'utf-8'));
 
 // ===== Globals =====
 global.sessions = global.sessions || {};
 global.config = JSON.parse(fs.readFileSync(path.join(process.cwd(), "config.json"), "utf-8"));
+
+const router = express.Router();
+const PAIRING_DIR = "./lib2/pairing";
 
 // ===== Helpers =====
 function getBareNumber(input) {
@@ -69,10 +72,9 @@ async function startPairingSession(xeonNumber) {
     await fs.ensureDir(dir);
 
     const { state, saveCreds } = await useMultiFileAuthState(dir);
-    const { version } = await fetchLatestBaileysVersion();
 
     const sock = makeWASocket({
-        version,
+        version: defaultVersion,
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
@@ -86,7 +88,6 @@ async function startPairingSession(xeonNumber) {
     sock.commands = await loadCommands();
     sock.ev.on("creds.update", saveCreds);
 
-    // Créer ou récupérer la session dans global.sessions
     global.sessions[xeonNumber] = global.sessions[xeonNumber] || {
         sock: null,
         firstRestartDone: false,
