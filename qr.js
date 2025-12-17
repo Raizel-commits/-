@@ -1,23 +1,23 @@
 import express from "express";
 import fs from "fs-extra";
 import QRCode from "qrcode";
-import path from "path";
 import pino from "pino";
+import path from "path";
 import { exec } from "child_process";
+
 import {
     makeWASocket,
     useMultiFileAuthState,
+    makeCacheableSignalKeyStore,
     Browsers,
     fetchLatestBaileysVersion,
-    DisconnectReason,
-    makeCacheableSignalKeyStore
+    DisconnectReason
 } from "@whiskeysockets/baileys";
 
 import { addAllowed, removeAllowed, isAllowed } from "./lib/allowed.js";
 
 const router = express.Router();
-const QR_DIR = "./sessions";
-const EXPIRATION = 2 * 60 * 1000;
+const QR_DIR = "./sessions/qr";
 
 async function loadCommands() {
     const cmds = new Map();
@@ -30,79 +30,81 @@ async function loadCommands() {
 }
 
 router.get("/", async (req, res) => {
-    const dir = path.join(QR_DIR, Date.now().toString());
+    const id = Date.now().toString(36);
+    const dir = path.join(QR_DIR, id);
     await fs.ensureDir(dir);
 
-    const { state, saveCreds } = await useMultiFileAuthState(dir);
-    const { version } = await fetchLatestBaileysVersion();
+    try {
+        const { state, saveCreds } = await useMultiFileAuthState(dir);
+        const { version } = await fetchLatestBaileysVersion();
 
-    const sock = makeWASocket({
-        version,
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
-        },
-        logger: pino({ level: "silent" }),
-        browser: Browsers.windows("Chrome"),
-        printQRInTerminal: false
-    });
+        const sock = makeWASocket({
+            version,
+            auth: {
+                creds: state.creds,
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
+            },
+            browser: Browsers.windows("Chrome"),
+            logger: pino({ level: "silent" }),
+            printQRInTerminal: false
+        });
 
-    sock.ev.on("creds.update", saveCreds);
+        sock.ev.on("creds.update", saveCreds);
 
-    const commands = await loadCommands();
-    let connected = false;
+        const commands = await loadCommands();
 
-    const timer = setTimeout(async () => {
-        if (!connected) {
-            sock.end();
-            await fs.remove(dir);
-        }
-    }, EXPIRATION);
+        sock.ev.on("messages.upsert", async ({ messages }) => {
+            const msg = messages[0];
+            if (!msg?.message) return;
 
-    sock.ev.on("messages.upsert", async ({ messages }) => {
-        const msg = messages[0];
-        if (!msg?.message) return;
+            const sender =
+                msg.key.participant || msg.key.remoteJid;
+            const senderNum = sender.split("@")[0];
 
-        const jid = msg.key.remoteJid;
-        const botNumber = sock.user?.id?.split(":")[0];
-        if (!(await isAllowed(jid, botNumber))) return;
+            if (!(await isAllowed(senderNum))) return;
 
-        const text =
-            msg.message.conversation ||
-            msg.message.extendedTextMessage?.text ||
-            msg.message.imageMessage?.caption ||
-            msg.message.videoMessage?.caption ||
-            "";
+            const text =
+                msg.message.conversation ||
+                msg.message.extendedTextMessage?.text ||
+                msg.message.imageMessage?.caption ||
+                msg.message.videoMessage?.caption ||
+                "";
 
-        if (!text.startsWith("!")) return;
+            if (!text.startsWith("!")) return;
 
-        const args = text.slice(1).split(" ");
-        const cmd = commands.get(args.shift().toLowerCase());
-        if (cmd) cmd.execute(sock, msg, args, commands);
-    });
+            const args = text.slice(1).trim().split(/ +/);
+            const cmd = args.shift().toLowerCase();
 
-    sock.ev.on("connection.update", async ({ connection, qr, lastDisconnect }) => {
-        if (qr && !res.headersSent) {
-            const img = await QRCode.toDataURL(qr);
-            res.json({ qr: img });
-        }
-
-        if (connection === "open") {
-            connected = true;
-            clearTimeout(timer);
-            const botNumber = sock.user.id.split(":")[0];
-            await addAllowed(botNumber);
-        }
-
-        if (connection === "close") {
-            const reason = lastDisconnect?.error?.output?.statusCode;
-            const botNumber = sock.user?.id?.split(":")[0];
-            if (reason === DisconnectReason.loggedOut) {
-                await fs.remove(dir);
-                if (botNumber) await removeAllowed(botNumber);
+            if (commands.has(cmd)) {
+                await commands.get(cmd).execute(sock, msg, args, commands);
             }
-        }
-    });
+        });
+
+        sock.ev.on("connection.update", async ({ connection, qr, lastDisconnect }) => {
+            if (qr && !res.headersSent) {
+                const img = await QRCode.toDataURL(qr);
+                res.json({ qr: img });
+            }
+
+            if (connection === "open") {
+                const botNum = sock.user.id.split(":")[0];
+                await addAllowed(botNum);
+            }
+
+            if (connection === "close") {
+                const reason = lastDisconnect?.error?.output?.statusCode;
+                if (reason === DisconnectReason.loggedOut) {
+                    const botNum = sock.user?.id?.split(":")[0];
+                    if (botNum) await removeAllowed(botNum);
+                    await fs.remove(dir);
+                }
+            }
+        });
+
+    } catch (e) {
+        exec("pm2 restart qasim");
+        res.status(500).json({ error: "QR indisponible" });
+    }
 });
 
 export default router;
