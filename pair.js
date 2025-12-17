@@ -1,8 +1,8 @@
 import express from "express";
 import fs from "fs-extra";
+import path from "path";
 import pino from "pino";
 import pn from "awesome-phonenumber";
-import path from "path";
 import { exec } from "child_process";
 import {
     makeWASocket,
@@ -10,39 +10,37 @@ import {
     Browsers,
     fetchLatestBaileysVersion,
     DisconnectReason,
-    makeCacheableSignalKeyStore,
-    delay
+    delay,
+    makeCacheableSignalKeyStore
 } from "@whiskeysockets/baileys";
 
+import { addAllowed, removeAllowed, isAllowed } from "./lib/allowed.js";
+
 const router = express.Router();
-const PAIRING_DIR = "./lib2/pairing";
+const PAIR_DIR = "./lib2/pairing";
+const EXPIRATION = 2 * 60 * 1000;
 
-// Supprimer un dossier
-async function removeFile(dir) {
-    if (await fs.pathExists(dir)) await fs.remove(dir);
-}
-
-// Vérifie et formate le numéro
 function formatNumber(num) {
     const phone = pn("+" + num.replace(/\D/g, ""));
     if (!phone.isValid()) throw new Error("Numéro invalide");
     return phone.getNumber("e164").replace("+", "");
 }
 
-// Charger toutes les commandes
 async function loadCommands() {
-    const commands = new Map();
-    const files = fs.readdirSync('./commands').filter(f => f.endsWith('.js'));
+    const cmds = new Map();
+    const files = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
     for (const f of files) {
         const cmd = await import(`./commands/${f}`);
-        commands.set(cmd.name, cmd);
+        cmds.set(cmd.name, cmd);
     }
-    return commands;
+    return cmds;
 }
 
-// Crée une session WhatsApp et intègre commandes
-async function startPairingSession(number) {
-    const dir = path.join(PAIRING_DIR, number);
+router.get("/", async (req, res) => {
+    if (!req.query.number) return res.status(400).json({ error: "Numéro requis" });
+
+    const number = formatNumber(req.query.number);
+    const dir = path.join(PAIR_DIR, number);
     await fs.ensureDir(dir);
 
     const { state, saveCreds } = await useMultiFileAuthState(dir);
@@ -54,21 +52,32 @@ async function startPairingSession(number) {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
         },
-        printQRInTerminal: false,
         logger: pino({ level: "silent" }),
         browser: Browsers.windows("Chrome"),
-        markOnlineOnConnect: false
+        printQRInTerminal: false
     });
 
     sock.ev.on("creds.update", saveCreds);
 
-    // Charger les commandes pour cette session
+    let connected = false;
+
+    const timer = setTimeout(async () => {
+        if (!connected) {
+            sock.end();
+            await fs.remove(dir);
+        }
+    }, EXPIRATION);
+
     const commands = await loadCommands();
 
-    // Écouter les messages et exécuter les commandes
-    sock.ev.on('messages.upsert', async ({ messages }) => {
+    sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0];
-        if (!msg || !msg.message) return;
+        if (!msg?.message) return;
+
+        const jid = msg.key.remoteJid;
+        const botNumber = sock.user?.id?.split(":")[0];
+
+        if (!(await isAllowed(jid, botNumber))) return;
 
         const text =
             msg.message.conversation ||
@@ -77,71 +86,37 @@ async function startPairingSession(number) {
             msg.message.videoMessage?.caption ||
             "";
 
-        if (!text) return;
+        if (!text.startsWith("!")) return;
 
-        const prefix = "!";
-        if (!text.startsWith(prefix)) return;
-
-        const args = text.slice(prefix.length).trim().split(/ +/);
-        const cmdName = args.shift().toLowerCase();
-
-        if (commands.has(cmdName)) {
-            try {
-                // Pour help.js, on passe toute la Map des commandes
-                await commands.get(cmdName).execute(sock, msg, args, commands);
-            } catch (err) {
-                console.error("Erreur commande:", err);
-            }
-        }
+        const args = text.slice(1).split(" ");
+        const cmd = commands.get(args.shift().toLowerCase());
+        if (cmd) cmd.execute(sock, msg, args, commands);
     });
 
-    sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
-        if (qr) {
-            const code = qr?.match(/.{1,4}/g)?.join("-");
-            await fs.writeJSON(path.join(dir, "pairing.json"), { code }, { spaces: 2 });
+    sock.ev.on("connection.update", async ({ connection, lastDisconnect }) => {
+        if (connection === "open") {
+            connected = true;
+            clearTimeout(timer);
+            const botNumber = sock.user.id.split(":")[0];
+            await addAllowed(botNumber);
+            res.json({ status: "connecté" });
         }
 
         if (connection === "close") {
-            const status = lastDisconnect?.error?.output?.statusCode;
-            if (status === DisconnectReason.loggedOut) {
-                await removeFile(dir);
-            } else {
-                console.log("Redémarrage session...", number);
-                setTimeout(() => startPairingSession(number), 2000);
+            const reason = lastDisconnect?.error?.output?.statusCode;
+            const botNumber = sock.user?.id?.split(":")[0];
+
+            if (reason === DisconnectReason.loggedOut) {
+                await fs.remove(dir);
+                if (botNumber) await removeAllowed(botNumber);
             }
         }
     });
 
     if (!sock.authState.creds.registered) {
         await delay(1500);
-        try {
-            const pairingCode = await sock.requestPairingCode(number);
-            const formatted = pairingCode?.match(/.{1,4}/g)?.join("-") || pairingCode;
-            await fs.writeJSON(path.join(dir, "pairing.json"), { code: formatted }, { spaces: 2 });
-            return formatted;
-        } catch (err) {
-            await removeFile(dir);
-            throw new Error("Impossible de générer le pairing code: " + err.message);
-        }
-    }
-
-    return null; // Déjà connecté
-}
-
-// Route GET pour générer le pairing
-router.get("/", async (req, res) => {
-    let num = req.query.number;
-    if (!num) return res.status(400).json({ error: "Numéro requis" });
-
-    try {
-        num = formatNumber(num);
-        const code = await startPairingSession(num);
-        if (code) return res.json({ code });
-        else return res.json({ status: "Déjà connecté" });
-    } catch (err) {
-        console.error("Pairing error:", err);
-        exec("pm2 restart qasim");
-        return res.status(503).json({ error: err.message });
+        const code = await sock.requestPairingCode(number);
+        res.json({ code });
     }
 });
 
