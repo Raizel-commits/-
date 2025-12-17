@@ -26,7 +26,7 @@ canvas{position:fixed;inset:0;z-index:-2;}
 .card{background:var(--glass);backdrop-filter:blur(20px);border-radius:22px;padding:20px;margin-bottom:20px;border:1px solid rgba(255,255,255,.15);box-shadow:0 0 40px rgba(0,0,0,.4);}
 label{font-size:12px;color:var(--muted);}
 input{width:100%;padding:14px;border-radius:14px;border:none;background:#00000055;color:white;margin:8px 0 14px;}
-.btn{display:block;width:100%;padding:15px;margin-top:8px;border-radius:16px;background:linear-gradient(135deg,var(--primary),#22c55e);color:#000;font-weight:800;border:none;text-align:center;transition:.25s;}
+.btn{display:block;width:100%;padding:15px;margin-top:8px;border-radius:16px;background:linear-gradient(135deg,var(--primary),#22c55e);color:#000;font-weight:800;border:none;text-align:center;transition:.25s;cursor:pointer;}
 .btn:active{transform:scale(.97);}
 .qr{text-align:center;margin-top:14px;}
 .qr img{width:240px;height:240px;border-radius:18px;background:#fff;padding:12px;}
@@ -71,20 +71,20 @@ a{color:var(--primary);text-decoration:none;font-weight:600;}
 
 <script>
 // Background animation
-const canvas=document.getElementById("bg"),ctx=canvas.getContext("2d");
-let w,h,particles=[];
-function resize(){w=canvas.width=innerWidth;h=canvas.height=innerHeight;}
-window.onresize=resize;resize();
+const canvas = document.getElementById("bg"), ctx = canvas.getContext("2d");
+let w, h, particles = [];
+function resize(){ w = canvas.width = innerWidth; h = canvas.height = innerHeight; }
+window.onresize = resize; resize();
 
-for(let i=0;i<50;i++)particles.push({x:Math.random()*w,y:Math.random()*h,r:2+Math.random()*3,dx:(Math.random()-.5)*0.7,dy:(Math.random()-.5)*0.7});
+for(let i=0;i<50;i++) particles.push({x:Math.random()*w, y:Math.random()*h, r:2+Math.random()*3, dx:(Math.random()-.5)*0.7, dy:(Math.random()-.5)*0.7});
 
 function animate(){
  ctx.clearRect(0,0,w,h);
  particles.forEach(p=>{
-  p.x+=p.dx;p.y+=p.dy;
-  if(p.x<0||p.x>w)p.dx*=-1;
-  if(p.y<0||p.y>h)p.dy*=-1;
-  ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle="rgba(29,185,84,0.5)";ctx.fill();
+  p.x += p.dx; p.y += p.dy;
+  if(p.x<0||p.x>w) p.dx*=-1;
+  if(p.y<0||p.y>h) p.dy*=-1;
+  ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fillStyle="rgba(29,185,84,0.5)"; ctx.fill();
  });
  requestAnimationFrame(animate);
 }
@@ -92,17 +92,17 @@ animate();
 window.addEventListener("pointerdown",()=>particles.forEach(p=>{p.dx+=Math.random()*2-1;p.dy+=Math.random()*2-1;}));
 
 // QR generation
-document.getElementById("gen").onclick=async()=>{
- const phone=document.getElementById("phone").value.trim();
- const box=document.getElementById("qrBox");
- if(!phone){box.innerHTML="❌ Numéro manquant";return;}
- box.innerHTML="⏳ Génération du QR...";
+document.getElementById("gen").onclick = async () => {
+ const phone = document.getElementById("phone").value.trim();
+ const box = document.getElementById("qrBox");
+ if(!phone){ box.innerHTML = "❌ Numéro manquant"; return; }
+ box.innerHTML = "⏳ Génération du QR...";
  try{
-  const r=await fetch(`/qr?number=${phone}`);
-  const d=await r.json();
-  box.innerHTML=d.qr?`<img src="${d.qr}">`:"❌ Erreur QR";
+  const r = await fetch(`/qr?number=${phone}`);
+  const d = await r.json();
+  box.innerHTML = d.qr ? `<img src="${d.qr}">` : "❌ Erreur QR";
  }catch{
-  box.innerHTML="❌ Serveur injoignable";
+  box.innerHTML = "❌ Serveur injoignable";
  }
 };
 </script>
