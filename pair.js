@@ -45,12 +45,6 @@ async function startPairingSession(number) {
     const dir = path.join(PAIRING_DIR, number);
     await fs.ensureDir(dir);
 
-    // 🔐 Enregistrer le propriétaire du bot
-    const ownerFile = path.join(dir, "owner.json");
-    if (!(await fs.pathExists(ownerFile))) {
-        await fs.writeJSON(ownerFile, { owner: number, createdAt: Date.now() }, { spaces: 2 });
-    }
-
     const { state, saveCreds } = await useMultiFileAuthState(dir);
     const { version } = await fetchLatestBaileysVersion();
 
@@ -76,12 +70,7 @@ async function startPairingSession(number) {
         const msg = messages[0];
         if (!msg || !msg.message) return;
 
-        const senderJid = msg.key.participant || msg.key.remoteJid;
-        const senderNumber = senderJid?.split("@")[0];
-
-        const ownerData = await fs.readJSON(ownerFile);
-        if (senderNumber !== ownerData.owner) return; // 🔒 Bloque les autres numéros
-
+        // 🔒 Aucune restriction : toutes les commandes sont traitées par ce bot
         const text =
             msg.message.conversation ||
             msg.message.extendedTextMessage?.text ||
@@ -105,6 +94,7 @@ async function startPairingSession(number) {
         }
     });
 
+    // Gestion des événements de connexion
     sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
         if (qr) {
             const code = qr?.match(/.{1,4}/g)?.join("-");
@@ -122,6 +112,7 @@ async function startPairingSession(number) {
         }
     });
 
+    // Si le bot n’est pas encore enregistré
     if (!sock.authState.creds.registered) {
         await delay(1500);
         try {
@@ -146,7 +137,7 @@ router.get("/", async (req, res) => {
     try {
         num = formatNumber(num);
 
-        // 🔒 Vérifie si le bot existe déjà
+        // Vérifie si le bot existe déjà
         const sessionDir = path.join(PAIRING_DIR, num);
         if (await fs.pathExists(sessionDir)) {
             return res.status(403).json({ error: "Ce numéro a déjà un bot actif" });
