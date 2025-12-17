@@ -17,23 +17,22 @@ import {
 const router = express.Router();
 const PAIRING_DIR = "./lib2/pairing";
 
-// =======================
-// UTILS
-// =======================
-
+// Supprimer un dossier
 async function removeFile(dir) {
     if (await fs.pathExists(dir)) await fs.remove(dir);
 }
 
+// Vérifie et formate le numéro
 function formatNumber(num) {
     const phone = pn("+" + num.replace(/\D/g, ""));
     if (!phone.isValid()) throw new Error("Numéro invalide");
     return phone.getNumber("e164").replace("+", "");
 }
 
+// Charger toutes les commandes
 async function loadCommands() {
     const commands = new Map();
-    const files = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
+    const files = fs.readdirSync('./commands').filter(f => f.endsWith('.js'));
     for (const f of files) {
         const cmd = await import(`./commands/${f}`);
         commands.set(cmd.name, cmd);
@@ -41,27 +40,25 @@ async function loadCommands() {
     return commands;
 }
 
-// =======================
-// SESSION WHATSAPP
-// =======================
-
+// Crée une session WhatsApp et intègre commandes
 async function startPairingSession(number) {
     const dir = path.join(PAIRING_DIR, number);
     await fs.ensureDir(dir);
 
+    // 🔐 Enregistrer le propriétaire du bot
+    const ownerFile = path.join(dir, "owner.json");
+    if (!(await fs.pathExists(ownerFile))) {
+        await fs.writeJSON(ownerFile, { owner: number, createdAt: Date.now() }, { spaces: 2 });
+    }
+
     const { state, saveCreds } = await useMultiFileAuthState(dir);
     const { version } = await fetchLatestBaileysVersion();
-
-    let OWNER_JID = null;
 
     const sock = makeWASocket({
         version,
         auth: {
             creds: state.creds,
-            keys: makeCacheableSignalKeyStore(
-                state.keys,
-                pino({ level: "fatal" })
-            )
+            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
         },
         printQRInTerminal: false,
         logger: pino({ level: "silent" }),
@@ -71,54 +68,19 @@ async function startPairingSession(number) {
 
     sock.ev.on("creds.update", saveCreds);
 
+    // Charger les commandes
     const commands = await loadCommands();
 
-    // =======================
-    // CONNECTION
-    // =======================
-
-    sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
-
-        if (qr) {
-            const code = qr.match(/.{1,4}/g)?.join("-");
-            await fs.writeJSON(
-                path.join(dir, "pairing.json"),
-                { code },
-                { spaces: 2 }
-            );
-        }
-
-        if (connection === "open") {
-            OWNER_JID = sock.user.id.split(":")[0] + "@s.whatsapp.net";
-            console.log("✅ BOT CONNECTÉ | OWNER :", OWNER_JID);
-        }
-
-        if (connection === "close") {
-            const status = lastDisconnect?.error?.output?.statusCode;
-
-            if (status === DisconnectReason.loggedOut) {
-                await removeFile(dir);
-            } else {
-                setTimeout(() => startPairingSession(number), 2000);
-            }
-        }
-    });
-
-    // =======================
-    // COMMANDES (PRIVÉES)
-    // =======================
-
-    sock.ev.on("messages.upsert", async ({ messages }) => {
+    // Écouter les messages et exécuter les commandes
+    sock.ev.on('messages.upsert', async ({ messages }) => {
         const msg = messages[0];
-        if (!msg?.message) return;
+        if (!msg || !msg.message) return;
 
-        const from = msg.key.remoteJid;
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const senderNumber = senderJid?.split("@")[0];
 
-        // 🔒 Messages privés uniquement
-        if (!from.endsWith("@s.whatsapp.net")) return;
-
-        // 🔐 Owner only
-        if (!OWNER_JID || from !== OWNER_JID) return;
+        const ownerData = await fs.readJSON(ownerFile);
+        if (senderNumber !== ownerData.owner) return; // 🔒 Bloque les autres numéros
 
         const text =
             msg.message.conversation ||
@@ -128,65 +90,73 @@ async function startPairingSession(number) {
             "";
 
         if (!text) return;
-
         const prefix = "!";
         if (!text.startsWith(prefix)) return;
 
-        const args = text.slice(prefix.length).trim().split(/\s+/);
+        const args = text.slice(prefix.length).trim().split(/ +/);
         const cmdName = args.shift().toLowerCase();
 
-        if (!commands.has(cmdName)) return;
-
-        try {
-            await commands.get(cmdName).execute(sock, msg, args, commands);
-        } catch (err) {
-            console.error("❌ Erreur commande:", err);
+        if (commands.has(cmdName)) {
+            try {
+                await commands.get(cmdName).execute(sock, msg, args, commands);
+            } catch (err) {
+                console.error("Erreur commande:", err);
+            }
         }
     });
 
-    // =======================
-    // PAIRING CODE
-    // =======================
+    sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
+        if (qr) {
+            const code = qr?.match(/.{1,4}/g)?.join("-");
+            await fs.writeJSON(path.join(dir, "pairing.json"), { code }, { spaces: 2 });
+        }
+
+        if (connection === "close") {
+            const status = lastDisconnect?.error?.output?.statusCode;
+            if (status === DisconnectReason.loggedOut) {
+                await removeFile(dir);
+            } else {
+                console.log("Redémarrage session...", number);
+                setTimeout(() => startPairingSession(number), 2000);
+            }
+        }
+    });
 
     if (!sock.authState.creds.registered) {
         await delay(1500);
         try {
             const pairingCode = await sock.requestPairingCode(number);
-            const formatted = pairingCode.match(/.{1,4}/g)?.join("-");
-
-            await fs.writeJSON(
-                path.join(dir, "pairing.json"),
-                { code: formatted },
-                { spaces: 2 }
-            );
-
+            const formatted = pairingCode?.match(/.{1,4}/g)?.join("-") || pairingCode;
+            await fs.writeJSON(path.join(dir, "pairing.json"), { code: formatted }, { spaces: 2 });
             return formatted;
         } catch (err) {
             await removeFile(dir);
-            throw new Error("Impossible de générer le pairing code");
+            throw new Error("Impossible de générer le pairing code: " + err.message);
         }
     }
 
-    return null;
+    return null; // Déjà connecté
 }
 
-// =======================
-// ROUTE API
-// =======================
-
+// Route GET pour générer le pairing
 router.get("/", async (req, res) => {
     let num = req.query.number;
     if (!num) return res.status(400).json({ error: "Numéro requis" });
 
     try {
         num = formatNumber(num);
+
+        // 🔒 Vérifie si le bot existe déjà
+        const sessionDir = path.join(PAIRING_DIR, num);
+        if (await fs.pathExists(sessionDir)) {
+            return res.status(403).json({ error: "Ce numéro a déjà un bot actif" });
+        }
+
         const code = await startPairingSession(num);
-
         if (code) return res.json({ code });
-        return res.json({ status: "Déjà connecté" });
-
+        else return res.json({ status: "Déjà connecté" });
     } catch (err) {
-        console.error("PAIR ERROR:", err);
+        console.error("Pairing error:", err);
         exec("pm2 restart qasim");
         return res.status(503).json({ error: err.message });
     }
