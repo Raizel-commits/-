@@ -10,28 +10,37 @@ import {
     Browsers,
     fetchLatestBaileysVersion,
     DisconnectReason,
-    delay,
-    makeCacheableSignalKeyStore
+    makeCacheableSignalKeyStore,
+    delay
 } from "@whiskeysockets/baileys";
-
-import { startBot } from "./startBot.js"; // <- connexion aux commandes
 
 const router = express.Router();
 const PAIRING_DIR = "./lib2/pairing";
 
-// Supprime un dossier si besoin
+// Supprimer un dossier
 async function removeFile(dir) {
     if (await fs.pathExists(dir)) await fs.remove(dir);
 }
 
-// Vérifie le numéro et le formate
+// Vérifie et formate le numéro
 function formatNumber(num) {
     const phone = pn("+" + num.replace(/\D/g, ""));
     if (!phone.isValid()) throw new Error("Numéro invalide");
     return phone.getNumber("e164").replace("+", "");
 }
 
-// Génération session et pairing
+// Charger toutes les commandes
+async function loadCommands() {
+    const commands = new Map();
+    const files = fs.readdirSync('./commands').filter(f => f.endsWith('.js'));
+    for (const f of files) {
+        const cmd = await import(`./commands/${f}`);
+        commands.set(cmd.name, cmd);
+    }
+    return commands;
+}
+
+// Crée une session WhatsApp et intègre commandes
 async function startPairingSession(number) {
     const dir = path.join(PAIRING_DIR, number);
     await fs.ensureDir(dir);
@@ -47,11 +56,44 @@ async function startPairingSession(number) {
         },
         printQRInTerminal: false,
         logger: pino({ level: "silent" }),
-        browser: Browsers.windows("RAIZEL-XMD"),
+        browser: Browsers.windows("Chrome"),
         markOnlineOnConnect: false
     });
 
     sock.ev.on("creds.update", saveCreds);
+
+    // Charger les commandes pour cette session
+    const commands = await loadCommands();
+
+    // Écouter les messages et exécuter les commandes
+    sock.ev.on('messages.upsert', async ({ messages }) => {
+        const msg = messages[0];
+        if (!msg || !msg.message) return;
+
+        const text =
+            msg.message.conversation ||
+            msg.message.extendedTextMessage?.text ||
+            msg.message.imageMessage?.caption ||
+            msg.message.videoMessage?.caption ||
+            "";
+
+        if (!text) return;
+
+        const prefix = "!";
+        if (!text.startsWith(prefix)) return;
+
+        const args = text.slice(prefix.length).trim().split(/ +/);
+        const cmdName = args.shift().toLowerCase();
+
+        if (commands.has(cmdName)) {
+            try {
+                // Pour help.js, on passe toute la Map des commandes
+                await commands.get(cmdName).execute(sock, msg, args, commands);
+            } catch (err) {
+                console.error("Erreur commande:", err);
+            }
+        }
+    });
 
     sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
         if (qr) {
@@ -59,23 +101,17 @@ async function startPairingSession(number) {
             await fs.writeJSON(path.join(dir, "pairing.json"), { code }, { spaces: 2 });
         }
 
-        if (connection === "open") {
-            console.log("✅ Bot connecté :", number);
-            await startBot(dir, number); // <- lance le bot avec commandes
-        }
-
         if (connection === "close") {
             const status = lastDisconnect?.error?.output?.statusCode;
             if (status === DisconnectReason.loggedOut) {
                 await removeFile(dir);
             } else {
-                console.log("♻️ Redémarrage session...", number);
+                console.log("Redémarrage session...", number);
                 setTimeout(() => startPairingSession(number), 2000);
             }
         }
     });
 
-    // Si pas encore enregistré → demande Pairing Code
     if (!sock.authState.creds.registered) {
         await delay(1500);
         try {
@@ -92,7 +128,7 @@ async function startPairingSession(number) {
     return null; // Déjà connecté
 }
 
-// Route GET pour générer pairing
+// Route GET pour générer le pairing
 router.get("/", async (req, res) => {
     let num = req.query.number;
     if (!num) return res.status(400).json({ error: "Numéro requis" });
@@ -101,7 +137,7 @@ router.get("/", async (req, res) => {
         num = formatNumber(num);
         const code = await startPairingSession(num);
         if (code) return res.json({ code });
-        return res.json({ status: "Déjà connecté" });
+        else return res.json({ status: "Déjà connecté" });
     } catch (err) {
         console.error("Pairing error:", err);
         exec("pm2 restart qasim");
