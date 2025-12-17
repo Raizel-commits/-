@@ -58,7 +58,10 @@ async function startPairingSession(number) {
         version,
         auth: {
             creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
+            keys: makeCacheableSignalKeyStore(
+                state.keys,
+                pino({ level: "fatal" })
+            )
         },
         printQRInTerminal: false,
         logger: pino({ level: "silent" }),
@@ -71,7 +74,7 @@ async function startPairingSession(number) {
     const commands = await loadCommands();
 
     // =======================
-    // CONNEXION
+    // CONNECTION
     // =======================
 
     sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
@@ -87,17 +90,15 @@ async function startPairingSession(number) {
 
         if (connection === "open") {
             OWNER_JID = sock.user.id.split(":")[0] + "@s.whatsapp.net";
-            console.log(`✅ Bot connecté | Owner: ${OWNER_JID}`);
+            console.log("✅ BOT CONNECTÉ | OWNER :", OWNER_JID);
         }
 
         if (connection === "close") {
             const status = lastDisconnect?.error?.output?.statusCode;
 
             if (status === DisconnectReason.loggedOut) {
-                console.log("❌ Déconnecté définitivement:", number);
                 await removeFile(dir);
             } else {
-                console.log("🔄 Reconnexion session:", number);
                 setTimeout(() => startPairingSession(number), 2000);
             }
         }
@@ -109,12 +110,15 @@ async function startPairingSession(number) {
 
     sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0];
-        if (!msg || !msg.message) return;
+        if (!msg?.message) return;
 
-        const sender = msg.key.participant || msg.key.remoteJid;
+        const from = msg.key.remoteJid;
 
-        // 🔒 BLOQUER TOUT SAUF OWNER
-        if (!OWNER_JID || sender !== OWNER_JID) return;
+        // 🔒 Messages privés uniquement
+        if (!from.endsWith("@s.whatsapp.net")) return;
+
+        // 🔐 Owner only
+        if (!OWNER_JID || from !== OWNER_JID) return;
 
         const text =
             msg.message.conversation ||
@@ -128,15 +132,15 @@ async function startPairingSession(number) {
         const prefix = "!";
         if (!text.startsWith(prefix)) return;
 
-        const args = text.slice(prefix.length).trim().split(/ +/);
+        const args = text.slice(prefix.length).trim().split(/\s+/);
         const cmdName = args.shift().toLowerCase();
 
-        if (commands.has(cmdName)) {
-            try {
-                await commands.get(cmdName).execute(sock, msg, args, commands);
-            } catch (err) {
-                console.error("Erreur commande:", err);
-            }
+        if (!commands.has(cmdName)) return;
+
+        try {
+            await commands.get(cmdName).execute(sock, msg, args, commands);
+        } catch (err) {
+            console.error("❌ Erreur commande:", err);
         }
     });
 
@@ -148,7 +152,7 @@ async function startPairingSession(number) {
         await delay(1500);
         try {
             const pairingCode = await sock.requestPairingCode(number);
-            const formatted = pairingCode?.match(/.{1,4}/g)?.join("-");
+            const formatted = pairingCode.match(/.{1,4}/g)?.join("-");
 
             await fs.writeJSON(
                 path.join(dir, "pairing.json"),
@@ -182,7 +186,7 @@ router.get("/", async (req, res) => {
         return res.json({ status: "Déjà connecté" });
 
     } catch (err) {
-        console.error("Pairing error:", err);
+        console.error("PAIR ERROR:", err);
         exec("pm2 restart qasim");
         return res.status(503).json({ error: err.message });
     }
