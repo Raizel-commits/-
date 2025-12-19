@@ -18,116 +18,62 @@ import chalk from "chalk";
 const router = express.Router();
 const PAIRING_DIR = "./lib2/pairing";
 
-// =======================
-// HELPERS
-function getBareNumber(input) {
-  if (!input) return "";
-  const s = String(input);
-  const beforeAt = s.split("@")[0];
-  const beforeColon = beforeAt.split(":")[0];
-  return beforeColon.replace(/[^0-9]/g, "");
-}
+/* =======================
+   REGISTRY GLOBAL (SAFE)
+======================= */
+global.botRestarted ??= new Set();      // bots déjà redémarrés
+global.botOwners ??= new Map();         // owners par bot
 
-function unwrapMessage(m) {
-  return m?.ephemeralMessage?.message ||
-         m?.viewOnceMessageV2?.message ||
-         m?.viewOnceMessageV2Extension?.message ||
-         m?.documentWithCaptionMessage?.message ||
-         m?.viewOnceMessage?.message ||
-         m;
-}
+/* =======================
+   HELPERS
+======================= */
+const getBareNumber = (v="") =>
+  String(v).split("@")[0].split(":")[0].replace(/\D/g,"");
 
-function pickText(m) {
-  return m?.conversation ||
-         m?.extendedTextMessage?.text ||
-         m?.imageMessage?.caption ||
-         m?.videoMessage?.caption ||
-         m?.buttonsResponseMessage?.selectedButtonId ||
-         m?.listResponseMessage?.singleSelectReply?.selectedRowId ||
-         m?.templateButtonReplyMessage?.selectedId ||
-         m?.reactionMessage?.text ||
-         m?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson;
-}
+const normalizeJid = jid =>
+  jid?.split(":")[0].replace("@lid","@s.whatsapp.net") ?? null;
 
-function normalizeJid(jid) {
-  if (!jid) return null;
-  return jid.split(":")[0].replace("@lid", "@s.whatsapp.net");
-}
-
-global.safeDecodeJid = function (jid) {
-  if (!jid) return "";
+global.safeDecodeJid = jid => {
   try {
-    const decoded = jidDecode(jid);
-    return decoded?.user ? `${decoded.user}@s.whatsapp.net` : jid;
+    const d = jidDecode(jid);
+    return d?.user ? `${d.user}@s.whatsapp.net` : jid;
   } catch {
-    return jid.split("@")[0] + "@s.whatsapp.net";
+    return normalizeJid(jid);
   }
 };
 
-// =======================
-// UTILITAIRES
+const unwrapMessage = m =>
+  m?.ephemeralMessage?.message ||
+  m?.viewOnceMessageV2?.message ||
+  m?.viewOnceMessage?.message || m;
 
-async function removeFile(dir) {
-    if (await fs.pathExists(dir)) await fs.remove(dir);
-}
+const pickText = m =>
+  m?.conversation ||
+  m?.extendedTextMessage?.text ||
+  m?.imageMessage?.caption ||
+  m?.videoMessage?.caption;
 
+/* =======================
+   UTILS
+======================= */
 function formatNumber(num) {
-    const phone = pn("+" + num.replace(/\D/g, ""));
-    if (!phone.isValid()) throw new Error("Numéro invalide");
-    return phone.getNumber("e164").replace("+", "");
+    const p = pn("+" + num.replace(/\D/g,""));
+    if (!p.isValid()) throw new Error("Numéro invalide");
+    return p.getNumber("e164").replace("+","");
 }
 
-async function loadCommands() {
-    const commands = new Map();
-    const files = fs.readdirSync('./commands').filter(f => f.endsWith('.js'));
-    for (const f of files) {
-        const cmd = await import(`./commands/${f}`);
-        commands.set(cmd.name, cmd);
-    }
-    return commands;
-}
-
-// =======================
-// DÉCONNEXION VOLONTAIRE
-async function disconnectBot(number, sock) {
+async function removeSession(number) {
     const dir = path.join(PAIRING_DIR, number);
-
-    try {
-        console.log(chalk.red(`🔴 Déconnexion volontaire du bot ${number}...`));
-
-        // Fermer la connexion WhatsApp proprement
-        if (sock && sock.ws.readyState === 1) {
-            await sock.logout();
-            sock.ws.close();
-        }
-
-        // Nettoyer le dossier de pairing
-        if (await fs.pathExists(dir)) {
-            await fs.remove(dir);
-            console.log(chalk.red(`Fichiers de bot ${number} supprimés.`));
-        }
-
-        // Supprimer le propriétaire du global
-        if (global.owners) {
-            global.owners = global.owners.filter(o => o !== number);
-        }
-
-        console.log(chalk.red(`✅ Bot ${number} réinitialisé.`));
-    } catch (err) {
-        console.error(`Erreur lors de la déconnexion de ${number}:`, err);
-    }
+    await fs.remove(dir).catch(()=>{});
+    global.botRestarted.delete(number);
+    global.botOwners.delete(number);
 }
 
-// =======================
-// START PAIRING & BOT
+/* =======================
+   BOT START
+======================= */
 async function startPairingSession(number) {
     const dir = path.join(PAIRING_DIR, number);
-
-    // Nettoyage si une ancienne session existe
-    if (await fs.pathExists(dir)) {
-        console.log(chalk.yellow(`Ancienne session détectée pour ${number}, suppression pour réinitialisation...`));
-        await fs.remove(dir);
-    }
     await fs.ensureDir(dir);
 
     const { state, saveCreds } = await useMultiFileAuthState(dir);
@@ -135,165 +81,109 @@ async function startPairingSession(number) {
 
     const sock = makeWASocket({
         version,
+        browser: Browsers.windows("Chrome"),
+        logger: pino({ level: "silent" }),
+        printQRInTerminal: false,
         auth: {
             creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
-        },
-        printQRInTerminal: false,
-        logger: pino({ level: "silent" }),
-        browser: Browsers.windows("Chrome"),
-        markOnlineOnConnect: false
+            keys: makeCacheableSignalKeyStore(state.keys, pino({ level:"fatal" }))
+        }
     });
 
     sock.ev.on("creds.update", saveCreds);
 
-    // Charger commandes
-    const commands = await loadCommands();
+    /* =======================
+       CONNECTION HANDLER
+    ======================= */
+    sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
 
-    // =======================
-    // OWNER
-    const ownerId = normalizeJid(sock.user?.id);
-    const ownerBare = getBareNumber(ownerId);
-    const ownerLid = sock.user?.lid ? getBareNumber(sock.user.lid) : null;
-    global.owners = [ownerBare];
-    if (ownerLid) global.owners.push(ownerLid);
+        if (qr) {
+            const code = qr.match(/.{1,4}/g)?.join("-");
+            await fs.writeJSON(path.join(dir,"pairing.json"),{code});
+        }
 
-    console.log(chalk.green(`✅ Propriétaire ID : ${ownerBare}`));
-    console.log(chalk.yellow(`🏠 Propriétaire LID : ${ownerLid || "non disponible"}`));
+        // ✅ CONNEXION COMPLÈTE
+        if (connection === "open") {
+            const ownerId = normalizeJid(sock.user?.id);
+            const ownerBare = getBareNumber(ownerId);
+            const ownerLid = sock.user?.lid ? getBareNumber(sock.user.lid) : null;
 
-    // =======================
-    // MESSAGE HANDLER
+            global.botOwners.set(number,[ownerBare,ownerLid].filter(Boolean));
+
+            console.log(chalk.green(`✅ ${number} connecté à WhatsApp`));
+
+            // 🔁 REDÉMARRAGE INTERNE (UNE SEULE FOIS)
+            if (!global.botRestarted.has(number)) {
+                global.botRestarted.add(number);
+                console.log(chalk.blue(`🔁 Redémarrage interne post-connexion : ${number}`));
+
+                setTimeout(() => {
+                    sock.end();
+                    startPairingSession(number);
+                }, 2000);
+            }
+        }
+
+        // ❌ DÉCONNEXION
+        if (connection === "close") {
+            const status = lastDisconnect?.error?.output?.statusCode;
+
+            if (status === DisconnectReason.loggedOut) {
+                console.log(chalk.red(`🔴 Logout volontaire : ${number}`));
+                await removeSession(number);
+            }
+        }
+    });
+
+    /* =======================
+       MESSAGE HANDLER
+    ======================= */
     sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0];
         if (!msg?.message) return;
 
         const from = msg.key.remoteJid;
-        const isGroup = from.endsWith("@g.us");
-        if (isGroup && !msg.key.participant) msg.key.participant = msg.participant || msg.key.remoteJid;
+        const sender = getBareNumber(
+          global.safeDecodeJid(msg.key.participant || msg.key.remoteJid)
+        );
 
-        let realSenderJid = msg.key.fromMe ? sock.user.id : (msg.key.participant || from);
-        try { realSenderJid = sock.decodeJid(realSenderJid); } catch { realSenderJid = normalizeJid(realSenderJid); }
+        const text = pickText(unwrapMessage(msg.message));
+        if (!text?.startsWith("!")) return;
 
-        const senderNum = getBareNumber(realSenderJid);
-        const inner = unwrapMessage(msg.message);
-        const text = pickText(inner);
-        if (!text) return;
-
-        // LOG
-        let senderName = senderNum;
-        let groupName = "Privé";
-        try {
-            if (isGroup) {
-                const metadata = await sock.groupMetadata(from);
-                groupName = metadata.subject || from;
-                const participant = metadata.participants.find(p => getBareNumber(p.id) === senderNum);
-                senderName = participant?.notify || participant?.name || senderNum;
-            } else {
-                const contact = sock.contacts[realSenderJid] || {};
-                senderName = contact.notify || contact.name || senderNum;
-            }
-        } catch {}
-
-        const ownerNum = global.owners?.[0];
-        const isOwner = senderNum === ownerNum;
-
-        console.log(`
-========================
-Message reçu :
-Groupe : ${groupName}
-Expéditeur : ${senderName} ${isOwner ? "(OWNER)" : ""}
-Numéro : ${senderNum}
-Message : ${text}
-========================
-        `);
-
-        // COMMANDES PRIVÉES
-        const prefix = "!";
-        if (!text.startsWith(prefix)) return;
-
-        if (!isOwner) {
-            await sock.sendMessage(from, { text: "❌ Vous n'êtes pas autorisé à utiliser ce bot." });
-            return;
+        const owners = global.botOwners.get(number) || [];
+        if (!owners.includes(sender)) {
+            return sock.sendMessage(from,{text:"❌ Accès refusé"});
         }
 
-        const args = text.slice(prefix.length).trim().split(/ +/);
-        const cmdName = args.shift().toLowerCase();
-
-        if (commands.has(cmdName)) {
-            try {
-                await commands.get(cmdName).execute(sock, msg, args, commands);
-            } catch (err) {
-                console.error("Erreur commande:", err);
-            }
-        }
-
-        // Déconnexion volontaire
-        if (cmdName === "logout") {
-            await sock.sendMessage(from, { text: "🔴 Déconnexion en cours..." });
-            await disconnectBot(senderNum, sock);
+        if (text === "!logout") {
+            await sock.sendMessage(from,{text:"🔴 Déconnexion..."});
+            await sock.logout();
         }
     });
 
-    // =======================
-    // CONNECTION HANDLER
-    sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
-        if (qr) {
-            const code = qr?.match(/.{1,4}/g)?.join("-");
-            await fs.writeJSON(path.join(dir, "pairing.json"), { code }, { spaces: 2 });
-        }
-
-        if (connection === "close") {
-            const status = lastDisconnect?.error?.output?.statusCode;
-            if (status === DisconnectReason.loggedOut) {
-                await removeFile(dir);
-                console.log(chalk.red(`Bot ${number} déconnecté et supprimé.`));
-            } else {
-                console.log(`Redémarrage interne de la session ${number}...`);
-                setTimeout(() => startPairingSession(number), 2000);
-            }
-        }
-    });
-
-    // =======================
-    // PAIRING / PREMIÈRE CONNEXION
+    /* =======================
+       PAIRING
+    ======================= */
     if (!sock.authState.creds.registered) {
-        await delay(1500);
-        try {
-            const pairingCode = await sock.requestPairingCode(number);
-            const formatted = pairingCode?.match(/.{1,4}/g)?.join("-") || pairingCode;
-            await fs.writeJSON(path.join(dir, "pairing.json"), { code: formatted }, { spaces: 2 });
-            return formatted;
-        } catch (err) {
-            await removeFile(dir);
-            throw new Error("Impossible de générer le pairing code: " + err.message);
-        }
-    } else {
-        console.log(chalk.blue(`Bot ${number} déjà connecté, redémarrage interne lancé...`));
-        setTimeout(() => startPairingSession(number), 2000);
+        await delay(1200);
+        const code = await sock.requestPairingCode(number);
+        await fs.writeJSON(path.join(dir,"pairing.json"),{
+            code: code.match(/.{1,4}/g)?.join("-")
+        });
+        return code;
     }
-
-    return null;
 }
 
-// =======================
-// ROUTE
-router.get("/", async (req, res) => {
-    let num = req.query.number;
-    if (!num) return res.status(400).json({ error: "Numéro requis" });
-
+/* =======================
+   ROUTE HTTP
+======================= */
+router.get("/", async (req,res)=>{
     try {
-        num = formatNumber(num);
-        const sessionDir = path.join(PAIRING_DIR, num);
-        if (await fs.pathExists(sessionDir)) {
-            return res.status(403).json({ error: "Ce numéro a déjà un bot actif" });
-        }
-
-        const code = await startPairingSession(num);
-        if (code) return res.json({ code });
-        else return res.json({ status: "Déjà connecté" });
-    } catch (err) {
-        console.error("Pairing error:", err);
-        return res.status(503).json({ error: err.message });
+        const num = formatNumber(req.query.number);
+        await startPairingSession(num);
+        res.json({status:"OK"});
+    } catch (e) {
+        res.status(500).json({error:e.message});
     }
 });
 
