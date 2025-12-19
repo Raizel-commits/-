@@ -62,7 +62,7 @@ async function startPairingSession(number) {
 
     sock.ev.on("creds.update", saveCreds);
 
-    // Charger les commandes
+    // Charger les commandes pour cette session
     const commands = await loadCommands();
 
     // Écouter les messages et exécuter les commandes
@@ -70,7 +70,6 @@ async function startPairingSession(number) {
         const msg = messages[0];
         if (!msg || !msg.message) return;
 
-        // 🔒 Aucune restriction : toutes les commandes sont traitées par ce bot
         const text =
             msg.message.conversation ||
             msg.message.extendedTextMessage?.text ||
@@ -79,6 +78,7 @@ async function startPairingSession(number) {
             "";
 
         if (!text) return;
+
         const prefix = "!";
         if (!text.startsWith(prefix)) return;
 
@@ -94,11 +94,18 @@ async function startPairingSession(number) {
         }
     });
 
-    // Gestion des événements de connexion
+    // 🔹 Gérer les mises à jour de connexion
     sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
         if (qr) {
             const code = qr?.match(/.{1,4}/g)?.join("-");
             await fs.writeJSON(path.join(dir, "pairing.json"), { code }, { spaces: 2 });
+        }
+
+        // Définir l’owner uniquement quand la connexion est établie
+        if (connection === "open" && sock.user) {
+            const botNumber = sock.user.id.split('@')[0];
+            global.owner = [botNumber];
+            console.log(`Owner automatique défini : ${botNumber}`);
         }
 
         if (connection === "close") {
@@ -112,7 +119,7 @@ async function startPairingSession(number) {
         }
     });
 
-    // Si le bot n’est pas encore enregistré
+    // Si le bot n'est pas encore enregistré, générer le pairing code
     if (!sock.authState.creds.registered) {
         await delay(1500);
         try {
@@ -136,13 +143,6 @@ router.get("/", async (req, res) => {
 
     try {
         num = formatNumber(num);
-
-        // Vérifie si le bot existe déjà
-        const sessionDir = path.join(PAIRING_DIR, num);
-        if (await fs.pathExists(sessionDir)) {
-            return res.status(403).json({ error: "Ce numéro a déjà un bot actif" });
-        }
-
         const code = await startPairingSession(num);
         if (code) return res.json({ code });
         else return res.json({ status: "Déjà connecté" });
