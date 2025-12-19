@@ -11,25 +11,73 @@ import {
     fetchLatestBaileysVersion,
     DisconnectReason,
     makeCacheableSignalKeyStore,
-    delay
+    delay,
+    jidDecode
 } from "@whiskeysockets/baileys";
+import chalk from "chalk";
 
 const router = express.Router();
 const PAIRING_DIR = "./lib2/pairing";
 
-// Supprimer un dossier
+// =======================
+// HELPERS
+function getBareNumber(input) {
+  if (!input) return "";
+  const s = String(input);
+  const beforeAt = s.split("@")[0];
+  const beforeColon = beforeAt.split(":")[0];
+  return beforeColon.replace(/[^0-9]/g, "");
+}
+
+function unwrapMessage(m) {
+  return m?.ephemeralMessage?.message ||
+         m?.viewOnceMessageV2?.message ||
+         m?.viewOnceMessageV2Extension?.message ||
+         m?.documentWithCaptionMessage?.message ||
+         m?.viewOnceMessage?.message ||
+         m;
+}
+
+function pickText(m) {
+  return m?.conversation ||
+         m?.extendedTextMessage?.text ||
+         m?.imageMessage?.caption ||
+         m?.videoMessage?.caption ||
+         m?.buttonsResponseMessage?.selectedButtonId ||
+         m?.listResponseMessage?.singleSelectReply?.selectedRowId ||
+         m?.templateButtonReplyMessage?.selectedId ||
+         m?.reactionMessage?.text ||
+         m?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson;
+}
+
+function normalizeJid(jid) {
+  if (!jid) return null;
+  return jid.split(":")[0].replace("@lid", "@s.whatsapp.net");
+}
+
+global.safeDecodeJid = function (jid) {
+  if (!jid) return "";
+  try {
+    const decoded = jidDecode(jid);
+    return decoded?.user ? `${decoded.user}@s.whatsapp.net` : jid;
+  } catch {
+    return jid.split("@")[0] + "@s.whatsapp.net";
+  }
+};
+
+// =======================
+// FONCTIONS UTILITAIRES
+
 async function removeFile(dir) {
     if (await fs.pathExists(dir)) await fs.remove(dir);
 }
 
-// Vérifie et formate le numéro
 function formatNumber(num) {
     const phone = pn("+" + num.replace(/\D/g, ""));
     if (!phone.isValid()) throw new Error("Numéro invalide");
     return phone.getNumber("e164").replace("+", "");
 }
 
-// Charger toutes les commandes
 async function loadCommands() {
     const commands = new Map();
     const files = fs.readdirSync('./commands').filter(f => f.endsWith('.js'));
@@ -40,7 +88,9 @@ async function loadCommands() {
     return commands;
 }
 
-// Crée une session WhatsApp et intègre commandes
+// =======================
+// PAIRING ET BOT
+
 async function startPairingSession(number) {
     const dir = path.join(PAIRING_DIR, number);
     await fs.ensureDir(dir);
@@ -62,25 +112,75 @@ async function startPairingSession(number) {
 
     sock.ev.on("creds.update", saveCreds);
 
-    // Charger les commandes pour cette session
+    // Charger les commandes
     const commands = await loadCommands();
 
-    // Écouter les messages et exécuter les commandes
-    sock.ev.on('messages.upsert', async ({ messages }) => {
+    // =======================
+    // OWNER
+    const ownerId = normalizeJid(sock.user?.id);
+    const ownerBare = getBareNumber(ownerId);
+    const ownerLid = sock.user?.lid ? getBareNumber(sock.user.lid) : null;
+    global.owners = [ownerBare];
+    if (ownerLid) global.owners.push(ownerLid);
+
+    console.log(chalk.green(`✅ Propriétaire ID : ${ownerBare}`));
+    console.log(chalk.yellow(`🏠 Propriétaire LID : ${ownerLid || "non disponible"}`));
+
+    // =======================
+    // MESSAGE HANDLER
+    sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0];
-        if (!msg || !msg.message) return;
+        if (!msg?.message) return;
 
-        const text =
-            msg.message.conversation ||
-            msg.message.extendedTextMessage?.text ||
-            msg.message.imageMessage?.caption ||
-            msg.message.videoMessage?.caption ||
-            "";
+        const from = msg.key.remoteJid;
+        const isGroup = from.endsWith("@g.us");
+        if (isGroup && !msg.key.participant) msg.key.participant = msg.participant || msg.key.remoteJid;
 
+        let realSenderJid = msg.key.fromMe ? sock.user.id : (msg.key.participant || from);
+        try { realSenderJid = sock.decodeJid(realSenderJid); } catch { realSenderJid = normalizeJid(realSenderJid); }
+
+        const senderNum = getBareNumber(realSenderJid);
+        const inner = unwrapMessage(msg.message);
+        const text = pickText(inner);
         if (!text) return;
 
+        // LOG
+        let senderName = senderNum;
+        let groupName = "Privé";
+        try {
+            if (isGroup) {
+                const metadata = await sock.groupMetadata(from);
+                groupName = metadata.subject || from;
+                const participant = metadata.participants.find(p => getBareNumber(p.id) === senderNum);
+                senderName = participant?.notify || participant?.name || senderNum;
+            } else {
+                const contact = sock.contacts[realSenderJid] || {};
+                senderName = contact.notify || contact.name || senderNum;
+            }
+        } catch {}
+
+        const ownerNum = global.owners?.[0];
+        const isOwner = senderNum === ownerNum;
+
+        console.log(`
+========================
+Message reçu :
+Groupe : ${groupName}
+Expéditeur : ${senderName} ${isOwner ? "(OWNER)" : ""}
+Numéro : ${senderNum}
+Message : ${text}
+========================
+        `);
+
+        // =======================
+        // COMMANDES PRIVÉES
         const prefix = "!";
         if (!text.startsWith(prefix)) return;
+
+        if (!isOwner) {
+            await sock.sendMessage(from, { text: "❌ Vous n'êtes pas autorisé à utiliser ce bot." });
+            return;
+        }
 
         const args = text.slice(prefix.length).trim().split(/ +/);
         const cmdName = args.shift().toLowerCase();
@@ -94,18 +194,12 @@ async function startPairingSession(number) {
         }
     });
 
-    // 🔹 Gérer les mises à jour de connexion
+    // =======================
+    // CONNECTION HANDLER
     sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
         if (qr) {
             const code = qr?.match(/.{1,4}/g)?.join("-");
             await fs.writeJSON(path.join(dir, "pairing.json"), { code }, { spaces: 2 });
-        }
-
-        // Définir l’owner uniquement quand la connexion est établie
-        if (connection === "open" && sock.user) {
-            const botNumber = sock.user.id.split('@')[0];
-            global.owner = [botNumber];
-            console.log(`Owner automatique défini : ${botNumber}`);
         }
 
         if (connection === "close") {
@@ -119,7 +213,8 @@ async function startPairingSession(number) {
         }
     });
 
-    // Si le bot n'est pas encore enregistré, générer le pairing code
+    // =======================
+    // PAIRING
     if (!sock.authState.creds.registered) {
         await delay(1500);
         try {
@@ -133,16 +228,22 @@ async function startPairingSession(number) {
         }
     }
 
-    return null; // Déjà connecté
+    return null;
 }
 
-// Route GET pour générer le pairing
+// =======================
+// ROUTE
 router.get("/", async (req, res) => {
     let num = req.query.number;
     if (!num) return res.status(400).json({ error: "Numéro requis" });
 
     try {
         num = formatNumber(num);
+        const sessionDir = path.join(PAIRING_DIR, num);
+        if (await fs.pathExists(sessionDir)) {
+            return res.status(403).json({ error: "Ce numéro a déjà un bot actif" });
+        }
+
         const code = await startPairingSession(num);
         if (code) return res.json({ code });
         else return res.json({ status: "Déjà connecté" });
