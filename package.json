@@ -15,6 +15,7 @@
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.7.21",
     "awesome-phonenumber": "^5.9.0",
+    "chalk": "^5.3.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "fs-extra": "^11.3.0",
