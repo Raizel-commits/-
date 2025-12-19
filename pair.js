@@ -17,19 +17,19 @@ import {
 const router = express.Router();
 const PAIRING_DIR = "./lib2/pairing";
 
-// Supprimer un dossier
+// 🔹 Supprimer un dossier
 async function removeFile(dir) {
     if (await fs.pathExists(dir)) await fs.remove(dir);
 }
 
-// Vérifie et formate le numéro
+// 🔹 Vérifie et formate le numéro
 function formatNumber(num) {
     const phone = pn("+" + num.replace(/\D/g, ""));
     if (!phone.isValid()) throw new Error("Numéro invalide");
     return phone.getNumber("e164").replace("+", "");
 }
 
-// Charger toutes les commandes
+// 🔹 Charger toutes les commandes
 async function loadCommands() {
     const commands = new Map();
     const files = fs.readdirSync('./commands').filter(f => f.endsWith('.js'));
@@ -40,7 +40,7 @@ async function loadCommands() {
     return commands;
 }
 
-// Crée une session WhatsApp et intègre commandes
+// 🔹 Crée une session WhatsApp et intègre commandes + owner automatique
 async function startPairingSession(number) {
     const dir = path.join(PAIRING_DIR, number);
     await fs.ensureDir(dir);
@@ -60,12 +60,17 @@ async function startPairingSession(number) {
         markOnlineOnConnect: false
     });
 
+    // 🔑 Owner automatique
+    const botNumber = sock.user.id.split('@')[0];
+    global.owner = [botNumber];
+    console.log(`Owner automatique défini : ${botNumber}`);
+
     sock.ev.on("creds.update", saveCreds);
 
-    // Charger les commandes pour cette session
+    // 🔹 Charger les commandes
     const commands = await loadCommands();
 
-    // Écouter les messages et exécuter les commandes
+    // 🔹 Écoute des messages
     sock.ev.on('messages.upsert', async ({ messages }) => {
         const msg = messages[0];
         if (!msg || !msg.message) return;
@@ -78,7 +83,6 @@ async function startPairingSession(number) {
             "";
 
         if (!text) return;
-
         const prefix = "!";
         if (!text.startsWith(prefix)) return;
 
@@ -87,7 +91,10 @@ async function startPairingSession(number) {
 
         if (commands.has(cmdName)) {
             try {
-                // Pour help.js, on passe toute la Map des commandes
+                const senderNumber = msg.key?.remoteJid?.split('@')[0] || msg.sender.split('@')[0];
+                if (!global.owner.includes(senderNumber)) {
+                    return sock.sendMessage(msg.key.remoteJid, { text: "🚫 Vous n'êtes pas autorisé à utiliser cette commande." });
+                }
                 await commands.get(cmdName).execute(sock, msg, args, commands);
             } catch (err) {
                 console.error("Erreur commande:", err);
@@ -95,6 +102,7 @@ async function startPairingSession(number) {
         }
     });
 
+    // 🔹 Gestion des événements de connexion
     sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
         if (qr) {
             const code = qr?.match(/.{1,4}/g)?.join("-");
@@ -112,6 +120,7 @@ async function startPairingSession(number) {
         }
     });
 
+    // 🔹 Génération du pairing si pas enregistré
     if (!sock.authState.creds.registered) {
         await delay(1500);
         try {
@@ -128,13 +137,20 @@ async function startPairingSession(number) {
     return null; // Déjà connecté
 }
 
-// Route GET pour générer le pairing
+// 🔹 Route GET pour générer le pairing
 router.get("/", async (req, res) => {
     let num = req.query.number;
     if (!num) return res.status(400).json({ error: "Numéro requis" });
 
     try {
         num = formatNumber(num);
+
+        // Vérifie si le bot existe déjà
+        const sessionDir = path.join(PAIRING_DIR, num);
+        if (await fs.pathExists(sessionDir)) {
+            return res.status(403).json({ error: "Ce numéro a déjà un bot actif" });
+        }
+
         const code = await startPairingSession(num);
         if (code) return res.json({ code });
         else return res.json({ status: "Déjà connecté" });
