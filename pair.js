@@ -3,7 +3,6 @@ import fs from "fs-extra";
 import pino from "pino";
 import pn from "awesome-phonenumber";
 import path from "path";
-import { exec } from "child_process";
 import {
     makeWASocket,
     useMultiFileAuthState,
@@ -66,7 +65,7 @@ global.safeDecodeJid = function (jid) {
 };
 
 // =======================
-// FONCTIONS UTILITAIRES
+// UTILITAIRES
 
 async function removeFile(dir) {
     if (await fs.pathExists(dir)) await fs.remove(dir);
@@ -89,10 +88,46 @@ async function loadCommands() {
 }
 
 // =======================
-// PAIRING ET BOT
+// DÉCONNEXION VOLONTAIRE
+async function disconnectBot(number, sock) {
+    const dir = path.join(PAIRING_DIR, number);
 
+    try {
+        console.log(chalk.red(`🔴 Déconnexion volontaire du bot ${number}...`));
+
+        // Fermer la connexion WhatsApp proprement
+        if (sock && sock.ws.readyState === 1) {
+            await sock.logout();
+            sock.ws.close();
+        }
+
+        // Nettoyer le dossier de pairing
+        if (await fs.pathExists(dir)) {
+            await fs.remove(dir);
+            console.log(chalk.red(`Fichiers de bot ${number} supprimés.`));
+        }
+
+        // Supprimer le propriétaire du global
+        if (global.owners) {
+            global.owners = global.owners.filter(o => o !== number);
+        }
+
+        console.log(chalk.red(`✅ Bot ${number} réinitialisé.`));
+    } catch (err) {
+        console.error(`Erreur lors de la déconnexion de ${number}:`, err);
+    }
+}
+
+// =======================
+// START PAIRING & BOT
 async function startPairingSession(number) {
     const dir = path.join(PAIRING_DIR, number);
+
+    // Nettoyage si une ancienne session existe
+    if (await fs.pathExists(dir)) {
+        console.log(chalk.yellow(`Ancienne session détectée pour ${number}, suppression pour réinitialisation...`));
+        await fs.remove(dir);
+    }
     await fs.ensureDir(dir);
 
     const { state, saveCreds } = await useMultiFileAuthState(dir);
@@ -112,7 +147,7 @@ async function startPairingSession(number) {
 
     sock.ev.on("creds.update", saveCreds);
 
-    // Charger les commandes
+    // Charger commandes
     const commands = await loadCommands();
 
     // =======================
@@ -172,7 +207,6 @@ Message : ${text}
 ========================
         `);
 
-        // =======================
         // COMMANDES PRIVÉES
         const prefix = "!";
         if (!text.startsWith(prefix)) return;
@@ -192,6 +226,12 @@ Message : ${text}
                 console.error("Erreur commande:", err);
             }
         }
+
+        // Déconnexion volontaire
+        if (cmdName === "logout") {
+            await sock.sendMessage(from, { text: "🔴 Déconnexion en cours..." });
+            await disconnectBot(senderNum, sock);
+        }
     });
 
     // =======================
@@ -206,15 +246,16 @@ Message : ${text}
             const status = lastDisconnect?.error?.output?.statusCode;
             if (status === DisconnectReason.loggedOut) {
                 await removeFile(dir);
+                console.log(chalk.red(`Bot ${number} déconnecté et supprimé.`));
             } else {
-                console.log("Redémarrage session...", number);
+                console.log(`Redémarrage interne de la session ${number}...`);
                 setTimeout(() => startPairingSession(number), 2000);
             }
         }
     });
 
     // =======================
-    // PAIRING
+    // PAIRING / PREMIÈRE CONNEXION
     if (!sock.authState.creds.registered) {
         await delay(1500);
         try {
@@ -226,6 +267,9 @@ Message : ${text}
             await removeFile(dir);
             throw new Error("Impossible de générer le pairing code: " + err.message);
         }
+    } else {
+        console.log(chalk.blue(`Bot ${number} déjà connecté, redémarrage interne lancé...`));
+        setTimeout(() => startPairingSession(number), 2000);
     }
 
     return null;
@@ -249,7 +293,6 @@ router.get("/", async (req, res) => {
         else return res.json({ status: "Déjà connecté" });
     } catch (err) {
         console.error("Pairing error:", err);
-        exec("pm2 restart qasim");
         return res.status(503).json({ error: err.message });
     }
 });
