@@ -3,7 +3,6 @@ import fs from "fs-extra";
 import pino from "pino";
 import pn from "awesome-phonenumber";
 import path from "path";
-import { exec } from "child_process";
 import {
     makeWASocket,
     useMultiFileAuthState,
@@ -15,58 +14,42 @@ import {
 } from "@whiskeysockets/baileys";
 
 const router = express.Router();
+const PAIRING_DIR = "./lib2/pairing";
+const PREFIX = "!";
 
-const BASE_DIR = "./lib2/pairing";
-const SESSION_DIR = path.join(BASE_DIR, "sessions");
-const USERS_FILE = path.join(BASE_DIR, "users.json");
-const BANNED_FILE = path.join(BASE_DIR, "banned.json");
+/* ================= UTILITAIRES ================= */
 
-// ================= INIT =================
-await fs.ensureDir(SESSION_DIR);
-if (!await fs.pathExists(USERS_FILE)) await fs.writeJSON(USERS_FILE, []);
-if (!await fs.pathExists(BANNED_FILE)) await fs.writeJSON(BANNED_FILE, []);
+async function removeDir(dir) {
+    if (await fs.pathExists(dir)) {
+        await fs.remove(dir);
+    }
+}
 
-// ================= UTILS =================
 function formatNumber(num) {
     const phone = pn("+" + num.replace(/\D/g, ""));
     if (!phone.isValid()) throw new Error("Numéro invalide");
     return phone.getNumber("e164").replace("+", "");
 }
 
-async function isBanned(number) {
-    const banned = await fs.readJSON(BANNED_FILE);
-    return banned.includes(number);
-}
-
-async function addUser(number) {
-    const users = await fs.readJSON(USERS_FILE);
-    if (!users.includes(number)) {
-        users.push(number);
-        await fs.writeJSON(USERS_FILE, users, { spaces: 2 });
-    }
-}
-
-// ================= COMMAND LOADER =================
 async function loadCommands() {
-    const map = new Map();
+    const commands = new Map();
     const files = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
-    for (const f of files) {
-        const cmd = await import(`../commands/${f}`);
-        map.set(cmd.name, cmd);
+    for (const file of files) {
+        const cmd = await import(`../commands/${file}`);
+        commands.set(cmd.name.toLowerCase(), cmd);
     }
-    return map;
+    return commands;
 }
 
-// ================= START SESSION =================
+/* ================= SESSION PAIRING ================= */
+
 async function startPairingSession(number) {
+    const sessionDir = path.join(PAIRING_DIR, number);
+    await fs.ensureDir(sessionDir);
 
-    if (await isBanned(number))
-        throw new Error("Numéro banni");
+    const OWNER = number; // 🔒 propriétaire du bot
 
-    const dir = path.join(SESSION_DIR, number);
-    await fs.ensureDir(dir);
-
-    const { state, saveCreds } = await useMultiFileAuthState(dir);
+    const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
     const { version } = await fetchLatestBaileysVersion();
 
     const sock = makeWASocket({
@@ -77,6 +60,7 @@ async function startPairingSession(number) {
         },
         logger: pino({ level: "silent" }),
         browser: Browsers.windows("Chrome"),
+        printQRInTerminal: false,
         markOnlineOnConnect: false
     });
 
@@ -84,86 +68,108 @@ async function startPairingSession(number) {
 
     const commands = await loadCommands();
 
-    // ================= MESSAGE HANDLER =================
+    /* ============ COMMANDES (MONO UTILISATEUR) ============ */
+
     sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0];
         if (!msg?.message) return;
 
-        const sender = msg.key.participant || msg.key.remoteJid;
-        const senderNum = sender.split("@")[0];
+        const sender =
+            msg.key.participant ||
+            msg.key.remoteJid;
 
-        // 🔒 restriction owner
-        if (senderNum !== number) return;
+        const senderNumber = sender?.split("@")[0];
+
+        // 🔐 BLOQUER TOUT SAUF LE PROPRIÉTAIRE
+        if (senderNumber !== OWNER) return;
 
         const text =
             msg.message.conversation ||
             msg.message.extendedTextMessage?.text ||
+            msg.message.imageMessage?.caption ||
+            msg.message.videoMessage?.caption ||
             "";
 
-        if (!text?.startsWith("!")) return;
+        if (!text.startsWith(PREFIX)) return;
 
-        const args = text.slice(1).trim().split(/ +/);
-        const cmdName = args.shift().toLowerCase();
+        const args = text.slice(PREFIX.length).trim().split(/\s+/);
+        const commandName = args.shift().toLowerCase();
 
-        if (commands.has(cmdName)) {
-            try {
-                await commands.get(cmdName).execute(sock, msg, args, commands);
-            } catch (e) {
-                console.error("Commande error:", e);
-            }
+        const command = commands.get(commandName);
+        if (!command) return;
+
+        try {
+            await command.execute(sock, msg, args, commands);
+        } catch (err) {
+            console.error("Erreur commande:", err);
         }
     });
 
-    // ================= CONNECTION =================
+    /* ============ CONNEXION / DECONNEXION ============ */
+
     sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
 
         if (qr) {
-            const code = qr.match(/.{1,4}/g).join("-");
+            const code = qr.match(/.{1,4}/g)?.join("-");
             await fs.writeJSON(
-                path.join(BASE_DIR, "pairing.json"),
-                { number, code },
+                path.join(sessionDir, "pairing.json"),
+                { code },
                 { spaces: 2 }
             );
         }
 
-        if (connection === "open") {
-            await addUser(number);
-        }
-
         if (connection === "close") {
-            const status = lastDisconnect?.error?.output?.statusCode;
+            const reason = lastDisconnect?.error?.output?.statusCode;
 
-            if (status === DisconnectReason.loggedOut) {
-                await fs.remove(dir);
+            if (reason === DisconnectReason.loggedOut) {
+                await removeDir(sessionDir);
             } else {
-                setTimeout(() => startPairingSession(number), 3000);
+                setTimeout(() => startPairingSession(number), 2000);
             }
         }
     });
 
-    // ================= PAIRING =================
+    /* ============ PAIRING CODE ============ */
+
     if (!sock.authState.creds.registered) {
         await delay(1500);
-        const pairingCode = await sock.requestPairingCode(number);
-        return pairingCode.match(/.{1,4}/g).join("-");
+        try {
+            const pairingCode = await sock.requestPairingCode(number);
+            const formatted = pairingCode.match(/.{1,4}/g)?.join("-");
+
+            await fs.writeJSON(
+                path.join(sessionDir, "pairing.json"),
+                { code: formatted },
+                { spaces: 2 }
+            );
+
+            return formatted;
+        } catch (err) {
+            await removeDir(sessionDir);
+            throw new Error("Erreur pairing : " + err.message);
+        }
     }
 
-    return null;
+    return null; // déjà connecté
 }
 
-// ================= ROUTE =================
+/* ================= ROUTE API ================= */
+
 router.get("/", async (req, res) => {
     try {
+        if (!req.query.number) {
+            return res.status(400).json({ error: "Numéro requis" });
+        }
+
         const number = formatNumber(req.query.number);
         const code = await startPairingSession(number);
 
         if (code) return res.json({ code });
-        return res.json({ status: "déjà connecté" });
+        return res.json({ status: "Déjà connecté" });
 
-    } catch (e) {
-        console.error(e);
-        exec("pm2 restart qasim");
-        res.status(503).json({ error: e.message });
+    } catch (err) {
+        console.error("Pairing error:", err);
+        return res.status(500).json({ error: err.message });
     }
 });
 
