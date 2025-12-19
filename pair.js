@@ -17,12 +17,52 @@ const router = express.Router();
 const PAIRING_DIR = "./lib2/pairing";
 const PREFIX = "!";
 
-/* ================= UTILITAIRES ================= */
+/* =================== UTILITAIRES =================== */
 
+// Récupère le numéro “bare” d’un JID
+function getBareNumber(input) {
+  if (!input) return "";
+  const s = String(input);
+  const beforeAt = s.split("@")[0];
+  const beforeColon = beforeAt.split(":")[0];
+  return beforeColon.replace(/[^0-9]/g, "");
+}
+
+// Déwrap tous types de messages (éphémères, viewOnce, documentWithCaption, etc.)
+function unwrapMessage(m) {
+  return m?.ephemeralMessage?.message ||
+         m?.viewOnceMessageV2?.message ||
+         m?.viewOnceMessageV2Extension?.message ||
+         m?.documentWithCaptionMessage?.message ||
+         m?.viewOnceMessage?.message ||
+         m;
+}
+
+// Récupère le texte d’un message quel que soit le type
+function pickText(m) {
+  return m?.conversation ||
+         m?.extendedTextMessage?.text ||
+         m?.imageMessage?.caption ||
+         m?.videoMessage?.caption ||
+         m?.buttonsResponseMessage?.selectedButtonId ||
+         m?.listResponseMessage?.singleSelectReply?.selectedRowId ||
+         m?.templateButtonReplyMessage?.selectedId ||
+         m?.reactionMessage?.text ||
+         m?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson;
+}
+
+// Normalise le JID pour éviter les suffixes @lid ou :xxxx
+function normalizeJid(jid) {
+  if (!jid) return null;
+  return jid.split(":")[0].replace("@lid", "@s.whatsapp.net");
+}
+
+// Supprimer un dossier
 async function removeDir(dir) {
     if (await fs.pathExists(dir)) await fs.remove(dir);
 }
 
+// Vérifie et formate le numéro
 function formatNumber(num) {
     try {
         const phone = pn("+" + num.replace(/\D/g, ""));
@@ -34,6 +74,7 @@ function formatNumber(num) {
     }
 }
 
+// Charger toutes les commandes
 async function loadCommands() {
     const commands = new Map();
     const files = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
@@ -48,13 +89,13 @@ async function loadCommands() {
     return commands;
 }
 
-/* ================= SESSION PAIRING ================= */
+/* =================== SESSION PAIRING =================== */
 
 async function startPairingSession(number) {
     const sessionDir = path.join(PAIRING_DIR, number);
     await fs.ensureDir(sessionDir);
 
-    const OWNER = number; // Numéro propriétaire du bot
+    const OWNER = number; // Numéro qui a généré le pairing code
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
     const { version } = await fetchLatestBaileysVersion();
@@ -77,22 +118,14 @@ async function startPairingSession(number) {
 
     /* ======= COMMANDES MONO-UTILISATEUR ======= */
     sock.ev.on("messages.upsert", async ({ messages }) => {
-        const msg = messages[0];
+        const msg = unwrapMessage(messages[0]);
         if (!msg?.message) return;
 
-        const sender = msg.key.participant || msg.key.remoteJid;
-        const senderNumber = sender?.split("@")[0];
+        const senderNumber = getBareNumber(msg.key.participant || msg.key.remoteJid);
+        if (senderNumber !== OWNER) return; // seul le propriétaire peut utiliser les commandes
 
-        if (senderNumber !== OWNER) return; // ignore les autres
-
-        const text =
-            msg.message.conversation ||
-            msg.message.extendedTextMessage?.text ||
-            msg.message.imageMessage?.caption ||
-            msg.message.videoMessage?.caption ||
-            "";
-
-        if (!text.startsWith(PREFIX)) return;
+        const text = pickText(msg.message);
+        if (!text || !text.startsWith(PREFIX)) return;
 
         const args = text.slice(PREFIX.length).trim().split(/\s+/);
         const commandName = args.shift().toLowerCase();
@@ -139,7 +172,7 @@ async function startPairingSession(number) {
             console.log("Pairing code formaté:", formatted);
 
             await fs.writeJSON(path.join(sessionDir, "pairing.json"), { code: formatted }, { spaces: 2 });
-            return formatted; // retourne le code pour le front-end
+            return formatted;
         } catch (err) {
             console.error("Erreur génération pairing code:", err.message);
             await removeDir(sessionDir);
@@ -151,7 +184,7 @@ async function startPairingSession(number) {
     return null; // déjà connecté
 }
 
-/* ================= ROUTE API ================= */
+/* =================== ROUTE API =================== */
 
 router.get("/", async (req, res) => {
     try {
