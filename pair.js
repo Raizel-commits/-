@@ -24,17 +24,26 @@ async function removeDir(dir) {
 }
 
 function formatNumber(num) {
-    const phone = pn("+" + num.replace(/\D/g, ""));
-    if (!phone.isValid()) throw new Error("Numéro invalide");
-    return phone.getNumber("e164").replace("+", "");
+    try {
+        const phone = pn("+" + num.replace(/\D/g, ""));
+        if (!phone.isValid()) throw new Error("Numéro invalide");
+        return phone.getNumber("e164").replace("+", "");
+    } catch (err) {
+        console.error("Format number error:", err.message);
+        throw new Error("Numéro invalide, vérifie le format (ex: 2376XXXXXXX)");
+    }
 }
 
 async function loadCommands() {
     const commands = new Map();
     const files = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
     for (const file of files) {
-        const cmd = await import(`./commands/${file}`);
-        commands.set(cmd.name.toLowerCase(), cmd);
+        try {
+            const cmd = await import(`./commands/${file}`);
+            commands.set(cmd.name.toLowerCase(), cmd);
+        } catch (err) {
+            console.error("Erreur chargement commande:", file, err.message);
+        }
     }
     return commands;
 }
@@ -45,7 +54,7 @@ async function startPairingSession(number) {
     const sessionDir = path.join(PAIRING_DIR, number);
     await fs.ensureDir(sessionDir);
 
-    const OWNER = number; // 🔒 Numéro propriétaire du bot
+    const OWNER = number; // Numéro propriétaire du bot
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
     const { version } = await fetchLatestBaileysVersion();
@@ -74,7 +83,7 @@ async function startPairingSession(number) {
         const sender = msg.key.participant || msg.key.remoteJid;
         const senderNumber = sender?.split("@")[0];
 
-        if (senderNumber !== OWNER) return; // 🔒 ignore les autres
+        if (senderNumber !== OWNER) return; // ignore les autres
 
         const text =
             msg.message.conversation ||
@@ -102,14 +111,19 @@ async function startPairingSession(number) {
     sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
         if (qr) {
             const code = qr.match(/.{1,4}/g)?.join("-");
+            console.log("QR code généré:", code);
             await fs.writeJSON(path.join(sessionDir, "pairing.json"), { code }, { spaces: 2 });
         }
 
         if (connection === "close") {
             const reason = lastDisconnect?.error?.output?.statusCode;
+            console.log("Session fermée pour", number, "Reason:", reason);
+
             if (reason === DisconnectReason.loggedOut) {
+                console.log("Supression session:", number);
                 await removeDir(sessionDir);
             } else {
+                console.log("Redémarrage session dans 2s pour", number);
                 setTimeout(() => startPairingSession(number), 2000);
             }
         }
@@ -120,18 +134,21 @@ async function startPairingSession(number) {
         await delay(1500);
         try {
             const pairingCode = await sock.requestPairingCode(number);
+            if (!pairingCode) throw new Error("Impossible de récupérer le code");
             const formatted = pairingCode?.match(/.{1,4}/g)?.join("-");
+            console.log("Pairing code formaté:", formatted);
 
             await fs.writeJSON(path.join(sessionDir, "pairing.json"), { code: formatted }, { spaces: 2 });
-
-            return formatted; // ✅ retourne le code pour le front-end
+            return formatted; // retourne le code pour le front-end
         } catch (err) {
+            console.error("Erreur génération pairing code:", err.message);
             await removeDir(sessionDir);
             throw new Error("Impossible de générer le pairing code: " + err.message);
         }
     }
 
-    return null; // Déjà connecté
+    console.log("Numéro déjà connecté:", number);
+    return null; // déjà connecté
 }
 
 /* ================= ROUTE API ================= */
@@ -139,16 +156,21 @@ async function startPairingSession(number) {
 router.get("/", async (req, res) => {
     try {
         const { number } = req.query;
-        if (!number) return res.status(400).json({ error: "Numéro requis" });
+        if (!number) {
+            console.log("Numéro manquant");
+            return res.status(400).json({ error: "Numéro requis" });
+        }
 
         const formattedNumber = formatNumber(number);
+        console.log("Numéro demandé:", formattedNumber);
+
         const code = await startPairingSession(formattedNumber);
 
         if (code) return res.json({ code });
         return res.json({ status: "Déjà connecté" });
 
     } catch (err) {
-        console.error("Pairing error:", err);
+        console.error("Pairing error:", err.message);
         return res.status(500).json({ error: err.message });
     }
 });
