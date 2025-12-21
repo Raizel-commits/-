@@ -14,17 +14,17 @@ import {
 } from "@whiskeysockets/baileys";
 
 const router = express.Router();
-const PAIRING_DIR = "./lib2/pairing";
+const BASE_DIR = "./lib2/pairing";
 
-// utils
-async function removeDir(dir) {
+/* ---------- Utils ---------- */
+async function rm(dir) {
   if (await fs.pathExists(dir)) await fs.remove(dir);
 }
 
 function formatNumber(num) {
-  const phone = pn("+" + num.replace(/\D/g, ""));
-  if (!phone.isValid()) throw new Error("Numéro invalide");
-  return phone.getNumber("e164").replace("+", "");
+  const p = pn("+" + num.replace(/\D/g, ""));
+  if (!p.isValid()) throw new Error("Numéro WhatsApp invalide");
+  return p.getNumber("e164").replace("+", "");
 }
 
 async function loadCommands() {
@@ -37,12 +37,11 @@ async function loadCommands() {
   return map;
 }
 
-// session pairing
-async function startPairingSession(number) {
-  const dir = path.join(PAIRING_DIR, number);
+/* ---------- Session ---------- */
+async function startPairing(number) {
+  const dir = path.join(BASE_DIR, number);
   await fs.ensureDir(dir);
 
-  // config auto
   const configPath = path.join(dir, "config.json");
   const allowedPath = path.join(dir, "allowed.json");
 
@@ -66,8 +65,8 @@ async function startPairingSession(number) {
 
   const sock = makeWASocket({
     version,
-    logger: pino({ level: "silent" }),
     browser: Browsers.windows("RAIZEL-XMD"),
+    logger: pino({ level: "silent" }),
     auth: {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
@@ -79,29 +78,26 @@ async function startPairingSession(number) {
 
   const commands = await loadCommands();
 
-  // messages
+  /* ---------- Messages ---------- */
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (type !== "notify") return;
 
-    const mek = messages[0];
-    if (!mek?.message) return;
+    const m = messages[0];
+    if (!m?.message) return;
 
-    if (mek.key.id?.startsWith("SH3NN-")) return;
+    if (m.key.id?.startsWith("SH3NN-")) return;
 
-    const jid = mek.key.participant || mek.key.remoteJid;
+    const jid = m.key.participant || m.key.remoteJid;
     const sender = jid.split("@")[0];
 
-    // SELF MODE
-    if (!config.public && sender !== config.owner && !mek.key.fromMe) return;
-
-    // allowed
+    if (!config.public && sender !== config.owner && !m.key.fromMe) return;
     if (!allowed.has(sender) && sender !== config.owner) return;
 
     const text =
-      mek.message.conversation ||
-      mek.message.extendedTextMessage?.text ||
-      mek.message.imageMessage?.caption ||
-      mek.message.videoMessage?.caption ||
+      m.message.conversation ||
+      m.message.extendedTextMessage?.text ||
+      m.message.imageMessage?.caption ||
+      m.message.videoMessage?.caption ||
       "";
 
     if (!text.startsWith(config.prefix)) return;
@@ -110,28 +106,25 @@ async function startPairingSession(number) {
     const cmd = args.shift().toLowerCase();
 
     if (commands.has(cmd)) {
-      await commands.get(cmd).execute(sock, mek, args, {
+      await commands.get(cmd).execute(sock, m, args, {
         config,
         allowed,
-        saveConfig: () => fs.writeJSON(configPath, config, { spaces: 2 }),
-        saveAllowed: () => fs.writeJSON(allowedPath, [...allowed], { spaces: 2 })
+        saveConfig: () =>
+          fs.writeJSON(configPath, config, { spaces: 2 }),
+        saveAllowed: () =>
+          fs.writeJSON(allowedPath, [...allowed], { spaces: 2 })
       });
     }
   });
 
-  // connection
-  sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
-    if (qr) {
-      const code = qr.match(/.{1,4}/g)?.join("-");
-      await fs.writeJSON(path.join(dir, "pairing.json"), { code });
-    }
-
+  /* ---------- Connexion ---------- */
+  sock.ev.on("connection.update", async ({ connection, lastDisconnect }) => {
     if (connection === "close") {
-      const reason = lastDisconnect?.error?.output?.statusCode;
-      if (reason === DisconnectReason.loggedOut) {
-        await removeDir(dir);
+      const code = lastDisconnect?.error?.output?.statusCode;
+      if (code === DisconnectReason.loggedOut) {
+        await rm(dir);
       } else {
-        setTimeout(() => startPairingSession(number), 2000);
+        setTimeout(() => startPairing(number), 2000);
       }
     }
   });
@@ -139,20 +132,20 @@ async function startPairingSession(number) {
   if (!sock.authState.creds.registered) {
     await delay(1500);
     const code = await sock.requestPairingCode(number);
-    return code.match(/.{1,4}/g)?.join("-");
+    return code.match(/.{1,4}/g).join("-");
   }
 
   return null;
 }
 
-// route
+/* ---------- Route ---------- */
 router.get("/", async (req, res) => {
   try {
     const number = formatNumber(req.query.number);
-    const code = await startPairingSession(number);
-    return res.json(code ? { code } : { status: "Déjà connecté" });
+    const code = await startPairing(number);
+    res.json(code ? { code } : { status: "already_connected" });
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    res.status(500).json({ error: e.message });
   }
 });
 
