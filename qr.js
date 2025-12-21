@@ -26,8 +26,8 @@ router.get("/", async (req, res) => {
 
     const sock = makeWASocket({
       version,
-      logger: pino({ level: "silent" }),
       browser: Browsers.windows("RAIZEL-XMD"),
+      logger: pino({ level: "silent" }),
       auth: {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
@@ -43,10 +43,6 @@ router.get("/", async (req, res) => {
         return res.json({ qr: img });
       }
 
-      if (connection === "open") {
-        console.log("✅ QR connecté :", sessionId);
-      }
-
       if (connection === "close") {
         const code = lastDisconnect?.error?.output?.statusCode;
         if (code === DisconnectReason.loggedOut) {
@@ -57,7 +53,7 @@ router.get("/", async (req, res) => {
 
   } catch (e) {
     await fs.remove(dir);
-    return res.status(503).json({ error: "QR indisponible" });
+    res.status(503).json({ error: "QR indisponible" });
   }
 });
 
