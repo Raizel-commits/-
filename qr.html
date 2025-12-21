@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RAIZEL XMD • Pairing Code</title>
+<title>RAIZEL XMD • QR Code</title>
 <style>
 :root{
  --glass:rgba(255,255,255,0.10);
@@ -28,8 +28,8 @@ label{font-size:12px;color:var(--muted);}
 input{width:100%;padding:14px;border-radius:14px;border:none;background:#00000055;color:white;margin:8px 0 14px;}
 .btn{display:block;width:100%;padding:15px;margin-top:8px;border-radius:16px;background:linear-gradient(135deg,var(--primary),#22c55e);color:#000;font-weight:800;border:none;text-align:center;transition:.25s;}
 .btn:active{transform:scale(.97);}
-.result{text-align:center;margin-top:14px;font-weight:700;}
-.code{font-size:26px;letter-spacing:6px;color:#22c55e;}
+.qr{text-align:center;margin-top:14px;}
+.qr img{width:240px;height:240px;border-radius:18px;background:#fff;padding:12px;}
 .footer-fixed{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:25px;z-index:2;}
 .footer-fixed a img{width:40px;height:40px;display:block;}
 .footer-text{text-align:center;font-size:12px;color:var(--muted);margin-top:10px;}
@@ -43,23 +43,21 @@ a{color:var(--primary);text-decoration:none;font-weight:600;}
 <div class="app">
  <div class="logo">
    <h1>RAIZEL XMD</h1>
-   <p>Connexion WhatsApp par Pairing Code</p>
+   <p>Connexion WhatsApp par QR Code</p>
  </div>
 
  <div class="card">
-  <p>1️⃣ Numéro WhatsApp (sans +)</p>
-  <p>2️⃣ Générer le code</p>
+  <p>1️⃣ Entrez votre numéro WhatsApp</p>
+  <p>2️⃣ Cliquez sur Générer QR</p>
   <p>3️⃣ WhatsApp → Appareils liés</p>
-  <p>4️⃣ Entrer le code</p>
+  <p>4️⃣ Scannez le QR affiché</p>
  </div>
 
  <div class="card">
   <label>Numéro WhatsApp</label>
   <input id="phone" placeholder="2376XXXXXXX">
-  <label>Nom du bot</label>
-  <input id="user" placeholder="raizelbot">
-  <button class="btn" id="gen">GÉNÉRER</button>
-  <div class="result" id="res"></div>
+  <button class="btn" id="gen">GÉNÉRER QR</button>
+  <div class="qr" id="qrBox">⏳ QR Code ici…</div>
  </div>
 </div>
 
@@ -93,22 +91,18 @@ function animate(){
 animate();
 window.addEventListener("pointerdown",()=>particles.forEach(p=>{p.dx+=Math.random()*2-1;p.dy+=Math.random()*2-1;}));
 
-// Pairing Code generation
+// QR generation
 document.getElementById("gen").onclick=async()=>{
  const phone=document.getElementById("phone").value.trim();
- const res=document.getElementById("res");
- if(!phone){res.innerHTML="❌ Numéro manquant";return;}
- res.innerHTML="⏳ Génération...";
+ const box=document.getElementById("qrBox");
+ if(!phone){box.innerHTML="❌ Numéro manquant";return;}
+ box.innerHTML="⏳ Génération du QR...";
  try{
-  const r=await fetch(`/code?number=${phone}`);
+  const r=await fetch(`/qr?number=${phone}`);
   const d=await r.json();
-  if(d.code) res.innerHTML=`<div class="code">${d.code}</div>`;
-  else if(d.status) res.innerHTML=`✅ ${d.status}`;
-  else if(d.error) res.innerHTML=`❌ ${d.error}`;
-  else res.innerHTML="❌ Erreur inconnue";
- }catch(err){
-  res.innerHTML="❌ Serveur injoignable";
-  console.error("Fetch error:", err);
+  box.innerHTML=d.qr?`<img src="${d.qr}">`:"❌ Erreur QR";
+ }catch{
+  box.innerHTML="❌ Serveur injoignable";
  }
 };
 </script>

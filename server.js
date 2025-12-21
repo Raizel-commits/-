@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 
+import qrRouter from './qr.js';
 import pairRouter from './pair.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -19,11 +20,13 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
 
 // Routes API
+app.use('/qr', qrRouter);
 app.use('/code', pairRouter);
 
 // Pages HTML
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.get('/pair', (req, res) => res.sendFile(path.join(__dirname, 'pair.html')));
+app.get('/qrpage', (req, res) => res.sendFile(path.join(__dirname, 'qr.html')));
 
 // Démarrage serveur
 app.listen(PORT, () => {
