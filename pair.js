@@ -50,6 +50,12 @@ function pickText(m) {
            "";
 }
 
+function normalizeJid(jid) {
+    if (!jid) return null;
+    return jid.split(":")[0].replace("@lid", "@s.whatsapp.net");
+}
+
+// ===================== LOAD COMMANDS =====================
 async function loadCommands() {
     const commands = new Map();
     const files = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
@@ -60,20 +66,19 @@ async function loadCommands() {
     return commands;
 }
 
-// ===================== Récupérer owner depuis creds.json =====================
+// ===================== GET OWNER =====================
 async function getOwnerFromSession(dir) {
     const credsFile = path.join(dir, "creds.json");
     if (!await fs.pathExists(credsFile)) return null;
 
     const creds = await fs.readJSON(credsFile);
+    const ownerId = creds.me?.id || null;
+    const ownerLid = creds.me?.lid || null;
 
-    const ownerId = creds.me?.id || null;   // WhatsApp ID
-    const ownerLid = creds.me?.lid || null; // LID si disponible
-
-    return ownerId ? (ownerLid ? [ownerLid, ownerId] : [ownerId]) : null;
+    return ownerId ? (ownerLid ? [normalizeJid(ownerLid), normalizeJid(ownerId)] : [normalizeJid(ownerId)]) : null;
 }
 
-// ===================== SESSION =====================
+// ===================== START SESSION =====================
 async function startPairingSession(number) {
     const dir = path.join(PAIRING_DIR, number);
     await fs.ensureDir(dir);
@@ -103,11 +108,7 @@ async function startPairingSession(number) {
         const isGroup = from.endsWith("@g.us");
 
         let senderJid = msg.key.fromMe ? sock.user.id : (msg.key.participant || from);
-        try {
-            senderJid = sock.decodeJid(senderJid);
-        } catch {
-            senderJid = senderJid.split(":")[0] + "@s.whatsapp.net";
-        }
+        senderJid = normalizeJid(senderJid);
 
         const inner = unwrapMessage(msg.message);
         const text = pickText(inner);
@@ -119,12 +120,13 @@ async function startPairingSession(number) {
 
         if (!commands.has(cmdName)) return;
 
-        // Logs
+        // ===== Logs =====
         console.log(isGroup
             ? `[GROUPE] (${senderJid}) -> ${text}`
             : `[PRIVÉ] (${senderJid}) -> ${text}`);
+        console.log("🔹 Owner ID/LID :", global.owners);
 
-        // Vérification ownerOnly
+        // ===== Vérification ownerOnly =====
         const command = commands.get(cmdName);
         if (command.ownerOnly && !global.owners.includes(senderJid)) {
             await sock.sendMessage(from, { text: "❌ Cette commande est réservée au propriétaire !" });
@@ -138,7 +140,7 @@ async function startPairingSession(number) {
         }
     });
 
-    // ===================== CONNEXION =====================
+    // ===================== CONNECTION =====================
     sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
         if (qr) {
             const code = qr.match(/.{1,4}/g)?.join("-");
@@ -148,7 +150,6 @@ async function startPairingSession(number) {
         if (connection === "open") {
             console.log(`✅ Session connectée : ${number}`);
 
-            // Récupérer owner depuis le fichier creds.json
             const owners = await getOwnerFromSession(dir);
             if (!owners) {
                 console.warn("⚠ Impossible de récupérer owner depuis la session !");
