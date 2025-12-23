@@ -80,49 +80,24 @@ async function startPairingSession(number) {
     sock.ev.on("creds.update", saveCreds);
 
     const commands = await loadCommands();
-    const botOwner = number + "@s.whatsapp.net"; // propriétaire
-    const isPrivateBot = true; // 🔐 BOT PRIVÉ PAR DÉFAUT
+    const botOwner = number + "@s.whatsapp.net";
 
     /* ============== MESSAGE HANDLER ============== */
-
     sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0];
         if (!msg?.message) return;
 
         const from = msg.key.remoteJid;
         const sender = getSender(msg);
-        const isGroup = from.endsWith("@g.us");
-
         const text = getTextMessage(msg);
         if (!text.startsWith(PREFIX)) return;
 
-        // 🔐 BOT PRIVÉ → seul le propriétaire
-        if (isPrivateBot && sender !== botOwner) return;
+        // Seul le propriétaire peut exécuter les commandes
+        if (sender !== botOwner) return;
 
         const args = text.slice(PREFIX.length).trim().split(/\s+/);
         const cmdName = args.shift().toLowerCase();
         if (!commands.has(cmdName)) return;
-
-        // Si commande help → envoyer en privé
-        if (cmdName === "help" && from !== botOwner) {
-            try {
-                await sock.sendMessage(botOwner, { text: "Voici la liste des commandes disponibles:" });
-            } catch (err) {
-                console.error("Erreur envoi help en privé:", err);
-            }
-            return;
-        }
-
-        let groupAdmins = [];
-        let isAdmin = false;
-
-        if (isGroup) {
-            const metadata = await sock.groupMetadata(from);
-            groupAdmins = metadata.participants
-                .filter(p => p.admin)
-                .map(p => p.id);
-            isAdmin = groupAdmins.includes(sender);
-        }
 
         const ctx = {
             sock,
@@ -130,13 +105,13 @@ async function startPairingSession(number) {
             from,
             sender,
             args,
-            isGroup,
-            isAdmin,
+            isGroup: from.endsWith("@g.us"),
             isOwner: sender === botOwner,
             commands
         };
 
         try {
+            // Exécute la commande dans le chat où elle est tapée
             await commands.get(cmdName).execute(ctx);
         } catch (err) {
             console.error("Erreur commande:", err);
@@ -144,7 +119,6 @@ async function startPairingSession(number) {
     });
 
     /* ============== CONNECTION UPDATE ============== */
-
     sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
         if (qr) {
             const code = qr.match(/.{1,4}/g)?.join("-");
@@ -162,7 +136,6 @@ async function startPairingSession(number) {
     });
 
     /* ============== PAIRING CODE ============== */
-
     if (!sock.authState.creds.registered) {
         await delay(1500);
         try {
@@ -180,7 +153,6 @@ async function startPairingSession(number) {
 }
 
 /* ================= ROUTE EXPRESS ================= */
-
 router.get("/", async (req, res) => {
     let num = req.query.number;
     if (!num) return res.status(400).json({ error: "Numéro requis" });
