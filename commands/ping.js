@@ -1,8 +1,6 @@
-// commands/ping.js
-export const name = "ping";                // Nom de la commande
-export const description = "Répond Pong";  // Description (optionnelle)
+export const name = "ping";
 
-export async function execute(sock, msg, args) {
-    const jid = msg.key.remoteJid;        // ID du chat où envoyer la réponse
-    await sock.sendMessage(jid, { text: "Pong 🏓" });
+export async function execute(ctx) {
+    const { sock, from } = ctx;
+    await sock.sendMessage(from, { text: "🏓 Pong !" });
 }
