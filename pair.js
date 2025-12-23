@@ -75,7 +75,11 @@ async function getOwnerFromSession(dir) {
     const ownerId = creds.me?.id || null;
     const ownerLid = creds.me?.lid || null;
 
-    return ownerId ? (ownerLid ? [normalizeJid(ownerLid), normalizeJid(ownerId)] : [normalizeJid(ownerId)]) : null;
+    const owners = [];
+    if (ownerId) owners.push(normalizeJid(ownerId));
+    if (ownerLid) owners.push(normalizeJid(ownerLid));
+
+    return owners.length ? owners : null;
 }
 
 // ===================== START SESSION =====================
@@ -150,14 +154,22 @@ async function startPairingSession(number) {
         if (connection === "open") {
             console.log(`✅ Session connectée : ${number}`);
 
-            const owners = await getOwnerFromSession(dir);
-            if (!owners) {
-                console.warn("⚠ Impossible de récupérer owner depuis la session !");
-                global.owners = [];
-            } else {
-                global.owners = owners;
-                console.log("🔹 Owner ID/LID :", global.owners);
-            }
+            // 1️⃣ Owner ID initial
+            const creds = await fs.readJSON(path.join(dir, "creds.json"));
+            global.owners = [];
+            if (creds.me?.id) global.owners.push(normalizeJid(creds.me.id));
+            console.log("🔹 Owner ID initial :", global.owners);
+
+            // 2️⃣ Attendre lid après synchronisation
+            setTimeout(async () => {
+                const updatedCreds = await fs.readJSON(path.join(dir, "creds.json"));
+                const lid = updatedCreds.me?.lid;
+                if (lid && !global.owners.includes(normalizeJid(lid))) {
+                    global.owners.push(normalizeJid(lid));
+                    console.log("🔹 Owner LID ajouté :", lid);
+                    console.log("🔹 Owners actuels :", global.owners);
+                }
+            }, 3000);
         }
 
         if (connection === "close") {
