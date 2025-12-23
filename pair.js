@@ -119,12 +119,20 @@ async function startPairingSession(number) {
 
         if (!commands.has(cmdName)) return;
 
+        // Logs
         console.log(isGroup
             ? `[GROUPE] (${senderJid}) -> ${text}`
             : `[PRIVÉ] (${senderJid}) -> ${text}`);
 
+        // Vérification ownerOnly
+        const command = commands.get(cmdName);
+        if (command.ownerOnly && !global.owners.includes(senderJid)) {
+            await sock.sendMessage(from, { text: "❌ Cette commande est réservée au propriétaire !" });
+            return;
+        }
+
         try {
-            await commands.get(cmdName).execute(sock, msg, args, commands);
+            await command.execute(sock, msg, args, commands);
         } catch (err) {
             console.error(`[${number}] Erreur commande ${cmdName}:`, err);
         }
@@ -140,7 +148,7 @@ async function startPairingSession(number) {
         if (connection === "open") {
             console.log(`✅ Session connectée : ${number}`);
 
-            // Récupérer owner directement depuis le fichier creds.json
+            // Récupérer owner depuis le fichier creds.json
             const owners = await getOwnerFromSession(dir);
             if (!owners) {
                 console.warn("⚠ Impossible de récupérer owner depuis la session !");
