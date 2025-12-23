@@ -1,12 +1,13 @@
 export const name = "menu";
 
-export async function execute(sock, msg, args, commands) {
-    let text = `👑 *BOT PRIVÉ*\n`;
-    text += `Owner: vous\n\n`;
-
-    for (const cmd of commands.keys()) {
-        text += `• !${cmd}\n`;
+export async function execute(ctx) {
+    if (!ctx.isOwner) {
+        return ctx.sock.sendMessage(ctx.from, {
+            text: "❌ Commande réservée au propriétaire"
+        });
     }
 
-    await sock.sendMessage(msg.key.remoteJid, { text });
+    await ctx.sock.sendMessage(ctx.from, {
+        text: "👑 Menu propriétaire\n\n• !restart\n• !status"
+    });
 }
