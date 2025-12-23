@@ -1,17 +1,13 @@
 export const name = "help";
 
 export async function execute(ctx) {
-    if (!ctx.isOwner) {
-        return; // silencieux (bot privé)
-        // ou si tu préfères un message :
-        // return ctx.sock.sendMessage(ctx.from, { text: "❌ Accès refusé" });
-    }
+    const { sock, from, commands } = ctx;
 
-    let text = "📖 *Commandes disponibles (Privé)*\n\n";
+    let helpMessage = "📜 Liste des commandes disponibles :\n\n";
+    commands.forEach((cmd, key) => {
+        helpMessage += `• !${key}\n`;
+    });
 
-    for (const [name] of ctx.commands) {
-        text += `• !${name}\n`;
-    }
-
-    await ctx.sock.sendMessage(ctx.from, { text });
+    // Toujours répondre dans le chat où la commande est tapée
+    await sock.sendMessage(from, { text: helpMessage });
 }
