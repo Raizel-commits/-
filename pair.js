@@ -16,23 +16,39 @@ import {
 
 const router = express.Router();
 const PAIRING_DIR = "./lib2/pairing";
+const PREFIX = "!";
 
-// Supprimer un dossier
+/* ================= UTILITAIRES ================= */
+
 async function removeFile(dir) {
     if (await fs.pathExists(dir)) await fs.remove(dir);
 }
 
-// Vérifie et formate le numéro
 function formatNumber(num) {
     const phone = pn("+" + num.replace(/\D/g, ""));
     if (!phone.isValid()) throw new Error("Numéro invalide");
     return phone.getNumber("e164").replace("+", "");
 }
 
-// Charger toutes les commandes
+function getTextMessage(msg) {
+    return (
+        msg.message?.conversation ||
+        msg.message?.extendedTextMessage?.text ||
+        msg.message?.imageMessage?.caption ||
+        msg.message?.videoMessage?.caption ||
+        ""
+    );
+}
+
+function getSender(msg) {
+    return msg.key.participant || msg.key.remoteJid;
+}
+
+/* ================= COMMANDES ================= */
+
 async function loadCommands() {
     const commands = new Map();
-    const files = fs.readdirSync('./commands').filter(f => f.endsWith('.js'));
+    const files = fs.readdirSync("./commands").filter(f => f.endsWith(".js"));
     for (const f of files) {
         const cmd = await import(`./commands/${f}`);
         commands.set(cmd.name, cmd);
@@ -40,7 +56,8 @@ async function loadCommands() {
     return commands;
 }
 
-// Crée une session WhatsApp et intègre commandes
+/* ================= PAIRING SESSION ================= */
+
 async function startPairingSession(number) {
     const dir = path.join(PAIRING_DIR, number);
     await fs.ensureDir(dir);
@@ -52,53 +69,84 @@ async function startPairingSession(number) {
         version,
         auth: {
             creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
+            keys: makeCacheableSignalKeyStore(
+                state.keys,
+                pino({ level: "fatal" })
+            )
         },
-        printQRInTerminal: false,
         logger: pino({ level: "silent" }),
         browser: Browsers.windows("Chrome"),
+        printQRInTerminal: false,
         markOnlineOnConnect: false
     });
 
     sock.ev.on("creds.update", saveCreds);
 
-    // Charger les commandes pour cette session
     const commands = await loadCommands();
 
-    // Écouter les messages et exécuter les commandes
-    sock.ev.on('messages.upsert', async ({ messages }) => {
+    const botOwner = number + "@s.whatsapp.net";
+    const isPrivateBot = true; // 🔐 BOT PRIVÉ PAR DÉFAUT
+
+    /* ============== MESSAGE HANDLER ============== */
+
+    sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0];
-        if (!msg || !msg.message) return;
+        if (!msg?.message) return;
 
-        const text =
-            msg.message.conversation ||
-            msg.message.extendedTextMessage?.text ||
-            msg.message.imageMessage?.caption ||
-            msg.message.videoMessage?.caption ||
-            "";
+        const from = msg.key.remoteJid;
+        const sender = getSender(msg);
+        const isGroup = from.endsWith("@g.us");
 
-        if (!text) return;
+        const text = getTextMessage(msg);
+        if (!text.startsWith(PREFIX)) return;
 
-        const prefix = "!";
-        if (!text.startsWith(prefix)) return;
+        // 🔐 BOT PRIVÉ → seul le propriétaire
+        if (isPrivateBot && sender !== botOwner) return;
 
-        const args = text.slice(prefix.length).trim().split(/ +/);
+        const args = text.slice(PREFIX.length).trim().split(/\s+/);
         const cmdName = args.shift().toLowerCase();
+        if (!commands.has(cmdName)) return;
 
-        if (commands.has(cmdName)) {
-            try {
-                // Pour help.js, on passe toute la Map des commandes
-                await commands.get(cmdName).execute(sock, msg, args, commands);
-            } catch (err) {
-                console.error("Erreur commande:", err);
-            }
+        let groupAdmins = [];
+        let isAdmin = false;
+
+        if (isGroup) {
+            const metadata = await sock.groupMetadata(from);
+            groupAdmins = metadata.participants
+                .filter(p => p.admin)
+                .map(p => p.id);
+            isAdmin = groupAdmins.includes(sender);
+        }
+
+        const ctx = {
+            sock,
+            msg,
+            from,
+            sender,
+            args,
+            isGroup,
+            isAdmin,
+            isOwner: sender === botOwner,
+            commands
+        };
+
+        try {
+            await commands.get(cmdName).execute(ctx);
+        } catch (err) {
+            console.error("Erreur commande:", err);
         }
     });
 
+    /* ============== CONNECTION UPDATE ============== */
+
     sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
         if (qr) {
-            const code = qr?.match(/.{1,4}/g)?.join("-");
-            await fs.writeJSON(path.join(dir, "pairing.json"), { code }, { spaces: 2 });
+            const code = qr.match(/.{1,4}/g)?.join("-");
+            await fs.writeJSON(
+                path.join(dir, "pairing.json"),
+                { code },
+                { spaces: 2 }
+            );
         }
 
         if (connection === "close") {
@@ -106,29 +154,35 @@ async function startPairingSession(number) {
             if (status === DisconnectReason.loggedOut) {
                 await removeFile(dir);
             } else {
-                console.log("Redémarrage session...", number);
                 setTimeout(() => startPairingSession(number), 2000);
             }
         }
     });
 
+    /* ============== PAIRING CODE ============== */
+
     if (!sock.authState.creds.registered) {
         await delay(1500);
         try {
             const pairingCode = await sock.requestPairingCode(number);
-            const formatted = pairingCode?.match(/.{1,4}/g)?.join("-") || pairingCode;
-            await fs.writeJSON(path.join(dir, "pairing.json"), { code: formatted }, { spaces: 2 });
+            const formatted = pairingCode?.match(/.{1,4}/g)?.join("-");
+            await fs.writeJSON(
+                path.join(dir, "pairing.json"),
+                { code: formatted },
+                { spaces: 2 }
+            );
             return formatted;
         } catch (err) {
             await removeFile(dir);
-            throw new Error("Impossible de générer le pairing code: " + err.message);
+            throw new Error("Impossible de générer le pairing code");
         }
     }
 
-    return null; // Déjà connecté
+    return null;
 }
 
-// Route GET pour générer le pairing
+/* ================= ROUTE EXPRESS ================= */
+
 router.get("/", async (req, res) => {
     let num = req.query.number;
     if (!num) return res.status(400).json({ error: "Numéro requis" });
@@ -136,8 +190,9 @@ router.get("/", async (req, res) => {
     try {
         num = formatNumber(num);
         const code = await startPairingSession(num);
-        if (code) return res.json({ code });
-        else return res.json({ status: "Déjà connecté" });
+        return code
+            ? res.json({ code })
+            : res.json({ status: "Déjà connecté" });
     } catch (err) {
         console.error("Pairing error:", err);
         exec("pm2 restart qasim");
