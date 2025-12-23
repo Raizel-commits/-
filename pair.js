@@ -80,38 +80,52 @@ async function startPairingSession(number) {
     sock.ev.on("creds.update", saveCreds);
 
     const commands = await loadCommands();
-    const botOwner = number + "@s.whatsapp.net";
+    const botOwner = number + "@s.whatsapp.net"; // numéro pair connecté
 
     /* ============== MESSAGE HANDLER ============== */
+
     sock.ev.on("messages.upsert", async ({ messages }) => {
         const msg = messages[0];
         if (!msg?.message) return;
 
-        const from = msg.key.remoteJid;
+        const from = msg.key.remoteJid; // chat où la commande est tapée
         const sender = getSender(msg);
         const text = getTextMessage(msg);
         if (!text.startsWith(PREFIX)) return;
 
-        // Seul le propriétaire peut exécuter les commandes
+        // 🔐 Seul le numéro pair peut exécuter les commandes
         if (sender !== botOwner) return;
 
         const args = text.slice(PREFIX.length).trim().split(/\s+/);
         const cmdName = args.shift().toLowerCase();
         if (!commands.has(cmdName)) return;
 
+        const isGroup = from.endsWith("@g.us");
+        let groupAdmins = [];
+        let isAdmin = false;
+
+        if (isGroup) {
+            const metadata = await sock.groupMetadata(from);
+            groupAdmins = metadata.participants
+                .filter(p => p.admin)
+                .map(p => p.id);
+            isAdmin = groupAdmins.includes(sender);
+        }
+
         const ctx = {
             sock,
             msg,
-            from,
-            sender,
+            from,        // chat actuel
+            sender,      // expéditeur
             args,
-            isGroup: from.endsWith("@g.us"),
+            isGroup,
+            isAdmin,
             isOwner: sender === botOwner,
             commands
         };
 
         try {
-            // Exécute la commande dans le chat où elle est tapée
+            // ⚡ La commande s'exécute et envoie la réponse dans le chat d'origine
             await commands.get(cmdName).execute(ctx);
         } catch (err) {
             console.error("Erreur commande:", err);
@@ -119,6 +133,7 @@ async function startPairingSession(number) {
     });
 
     /* ============== CONNECTION UPDATE ============== */
+
     sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
         if (qr) {
             const code = qr.match(/.{1,4}/g)?.join("-");
@@ -136,6 +151,7 @@ async function startPairingSession(number) {
     });
 
     /* ============== PAIRING CODE ============== */
+
     if (!sock.authState.creds.registered) {
         await delay(1500);
         try {
@@ -153,6 +169,7 @@ async function startPairingSession(number) {
 }
 
 /* ================= ROUTE EXPRESS ================= */
+
 router.get("/", async (req, res) => {
     let num = req.query.number;
     if (!num) return res.status(400).json({ error: "Numéro requis" });
