@@ -13,22 +13,37 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-// Middleware
+// ===== Middleware =====
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
 
-// Routes API
+// Logs des requêtes API
+app.use((req, res, next) => {
+  console.log(`📥 [API] ${req.method} ${req.url}`);
+  next();
+});
+
+// ===== Routes API =====
 app.use('/qr', qrRouter);
 app.use('/code', pairRouter);
 
-// Pages HTML
+// ===== Pages HTML =====
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.get('/pair', (req, res) => res.sendFile(path.join(__dirname, 'pair.html')));
 app.get('/qrpage', (req, res) => res.sendFile(path.join(__dirname, 'qr.html')));
 
-// Démarrage serveur
+// ===== Gestion erreurs globales =====
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("❌ Rejection non gérée :", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("💥 Exception non gérée :", err);
+});
+
+// ===== Démarrage serveur =====
 app.listen(PORT, () => {
   console.log(`🚀 RAIZEL-XMD actif sur http://localhost:${PORT}`);
 });
