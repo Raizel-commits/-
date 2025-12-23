@@ -69,10 +69,7 @@ async function startPairingSession(number) {
         version,
         auth: {
             creds: state.creds,
-            keys: makeCacheableSignalKeyStore(
-                state.keys,
-                pino({ level: "fatal" })
-            )
+            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }))
         },
         logger: pino({ level: "silent" }),
         browser: Browsers.windows("Chrome"),
@@ -83,8 +80,7 @@ async function startPairingSession(number) {
     sock.ev.on("creds.update", saveCreds);
 
     const commands = await loadCommands();
-
-    const botOwner = number + "@s.whatsapp.net";
+    const botOwner = number + "@s.whatsapp.net"; // propriétaire
     const isPrivateBot = true; // 🔐 BOT PRIVÉ PAR DÉFAUT
 
     /* ============== MESSAGE HANDLER ============== */
@@ -106,6 +102,16 @@ async function startPairingSession(number) {
         const args = text.slice(PREFIX.length).trim().split(/\s+/);
         const cmdName = args.shift().toLowerCase();
         if (!commands.has(cmdName)) return;
+
+        // Si commande help → envoyer en privé
+        if (cmdName === "help" && from !== botOwner) {
+            try {
+                await sock.sendMessage(botOwner, { text: "Voici la liste des commandes disponibles:" });
+            } catch (err) {
+                console.error("Erreur envoi help en privé:", err);
+            }
+            return;
+        }
 
         let groupAdmins = [];
         let isAdmin = false;
@@ -142,11 +148,7 @@ async function startPairingSession(number) {
     sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
         if (qr) {
             const code = qr.match(/.{1,4}/g)?.join("-");
-            await fs.writeJSON(
-                path.join(dir, "pairing.json"),
-                { code },
-                { spaces: 2 }
-            );
+            await fs.writeJSON(path.join(dir, "pairing.json"), { code }, { spaces: 2 });
         }
 
         if (connection === "close") {
@@ -166,11 +168,7 @@ async function startPairingSession(number) {
         try {
             const pairingCode = await sock.requestPairingCode(number);
             const formatted = pairingCode?.match(/.{1,4}/g)?.join("-");
-            await fs.writeJSON(
-                path.join(dir, "pairing.json"),
-                { code: formatted },
-                { spaces: 2 }
-            );
+            await fs.writeJSON(path.join(dir, "pairing.json"), { code: formatted }, { spaces: 2 });
             return formatted;
         } catch (err) {
             await removeFile(dir);
