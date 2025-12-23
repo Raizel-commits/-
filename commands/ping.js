@@ -2,5 +2,7 @@ export const name = "ping";
 
 export async function execute(ctx) {
     const { sock, from } = ctx;
-    await sock.sendMessage(from, { text: "🏓 Pong !" });
+
+    // Répond avec "Pong!" dans le même chat
+    await sock.sendMessage(from, { text: "Pong!" });
 }
