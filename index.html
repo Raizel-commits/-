@@ -1,8 +1,71 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <link rel="stylesheet" href="/styles.css">
   <title>Secret Story</title>
+  <style>
+    /* Fond animé */
+    @keyframes gradient {
+      0% {background-position: 0% 50%;}
+      50% {background-position: 100% 50%;}
+      100% {background-position: 0% 50%;}
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: linear-gradient(270deg, #ff4081, #7c4dff, #18ffff);
+      background-size: 600% 600%;
+      animation: gradient 20s ease infinite;
+      color: #fff;
+      text-align: center;
+    }
+
+    .container {
+      background-color: rgba(0,0,0,0.7);
+      padding: 50px;
+      border-radius: 20px;
+      width: 90%;
+      max-width: 700px;
+    }
+
+    h1 {
+      font-size: 4em;
+      margin-bottom: 20px;
+      color: #ff4081;
+    }
+
+    input {
+      font-size: 2em;
+      padding: 20px;
+      width: 80%;
+      border-radius: 15px;
+      border: none;
+      margin: 20px 0;
+      text-align: center;
+      background-color: #222;
+      color: #fff;
+    }
+
+    button {
+      font-size: 2em;
+      padding: 20px 40px;
+      border-radius: 15px;
+      border: none;
+      background-color: #ff4081;
+      color: #fff;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    button:hover { background-color: #e91e63; }
+
+    p { font-size: 1.5em; margin-top: 20px; }
+    a { color: #18ffff; text-decoration: none; }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -21,7 +84,7 @@
         body: JSON.stringify({ username: u.value })
       });
       const d = await r.json();
-      result.innerHTML = `Lien: <a style="color:#ff4081" href="/u/${d.username}">/u/${d.username}</a><br>Token inbox: ${d.inboxToken}`;
+      result.innerHTML = `Lien: <a href="/u/${d.username}">/u/${d.username}</a><br>Token inbox: ${d.inboxToken}`;
     }
   </script>
 </body>
