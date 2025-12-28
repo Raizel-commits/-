@@ -2,72 +2,171 @@
 <html>
 <head>
   <title>Secret Story - Dashboard</title>
-  <meta charset="UTF-8" />
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
-</head>
-<body style="background:#111;color:#fff;font-family:'Montserrat',sans-serif;">
-  <div id="root"></div>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap');
 
-  <script type="text/babel">
-    const {useState,useEffect} = React;
-
-    function Dashboard() {
-      const [messages,setMessages] = useState([]);
-      const [msg,setMsg] = useState("");
-      const username = localStorage.username;
-      const token = localStorage.token;
-
-      const loadInbox = async () => {
-        const res = await fetch("/api/inbox",{headers:{Authorization:token}});
-        const data = await res.json();
-        setMessages(data);
-      };
-
-      useEffect(()=>{
-        loadInbox();
-        const interval = setInterval(loadInbox,5000);
-        return ()=>clearInterval(interval);
-      },[]);
-
-      const copyLink = () => {
-        navigator.clipboard.writeText(`${location.origin}/u/${username}`);
-        setMsg("Lien copié !");
-        setTimeout(()=>setMsg(""),3000);
-      }
-
-      const logout = () => {
-        localStorage.clear();
-        location="/login.html";
-      }
-
-      return (
-        <div style={{padding:"30px", maxWidth:"800px", margin:"30px auto"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <h1 style={{color:"#ff4081"}}>Secret Story</h1>
-            <button onClick={logout} style={{padding:"10px 20px",borderRadius:"10px",border:"none",background:"#ff4081",color:"#fff",cursor:"pointer"}}>Déconnexion</button>
-          </div>
-          <p style={{color:"#18ffff"}}>{msg}</p>
-          <div style={{display:"flex",gap:"15px",marginBottom:"30px"}}>
-            <input value={`${location.origin}/u/${username}`} readOnly style={{flex:1,padding:"10px",borderRadius:"10px",border:"none",background:"#222",color:"#fff",textAlign:"center"}} />
-            <button onClick={copyLink} style={{padding:"10px 20px",borderRadius:"10px",border:"none",background:"#ff4081",color:"#fff"}}>Copier</button>
-          </div>
-          <h2>Inbox</h2>
-          <div style={{display:"flex",flexDirection:"column",gap:"15px"}}>
-            {messages.length===0 ? <p>Aucun message pour l'instant</p> :
-              messages.map((m,i)=>
-                <div key={i} style={{background:"#1c1c1c",padding:"20px",borderRadius:"15px",boxShadow:"0 0 10px rgba(24,255,255,0.3)",fontSize:"1.2em"}}>
-                  {m.content}
-                </div>
-              )
-            }
-          </div>
-        </div>
-      );
+    body {
+      margin:0;
+      font-family:'Montserrat',sans-serif;
+      background:#111;
+      color:#fff;
+      min-height:100vh;
     }
 
-    ReactDOM.render(<Dashboard />, document.getElementById("root"));
+    /* HEADER */
+    header {
+      background:#1c1c1c;
+      padding:20px 30px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      box-shadow:0 0 15px rgba(255,64,129,0.3);
+    }
+    header h1 {
+      font-size:2em;
+      color:#ff4081;
+      margin:0;
+    }
+    header button {
+      padding:10px 20px;
+      border:none;
+      border-radius:10px;
+      background:#ff4081;
+      color:#fff;
+      font-size:1em;
+      cursor:pointer;
+      transition:0.3s;
+    }
+    header button:hover { background:#e91e63; }
+
+    /* CONTAINER */
+    .container {
+      padding:30px;
+      max-width:800px;
+      margin:auto;
+    }
+
+    /* PUBLIC LINK */
+    .link-section {
+      margin-bottom:30px;
+      display:flex;
+      align-items:center;
+      gap:15px;
+    }
+    .link-section input {
+      flex:1;
+      padding:12px;
+      border-radius:12px;
+      border:none;
+      background:#222;
+      color:#fff;
+      font-size:1.1em;
+      text-align:center;
+    }
+    .link-section button {
+      padding:12px 25px;
+      border:none;
+      border-radius:12px;
+      background:#ff4081;
+      color:#fff;
+      font-size:1em;
+      cursor:pointer;
+      transition:0.3s;
+    }
+    .link-section button:hover { background:#e91e63; }
+
+    /* INBOX */
+    .inbox {
+      display:flex;
+      flex-direction:column;
+      gap:15px;
+    }
+    .message-card {
+      background:#1c1c1c;
+      padding:20px;
+      border-radius:15px;
+      box-shadow:0 0 15px rgba(24,255,255,0.3);
+      font-size:1.1em;
+      word-wrap:break-word;
+    }
+
+    /* MESSAGES */
+    #msg {
+      color:#18ffff;
+      font-size:1.1em;
+      margin-bottom:15px;
+      opacity:0;
+      transition:opacity 0.5s;
+    }
+    #msg.show {opacity:1;}
+
+    /* H2 */
+    h2 { margin-bottom:15px; color:#ff79c6; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Secret Story</h1>
+    <button onclick="logout()">Déconnexion</button>
+  </header>
+
+  <div class="container">
+    <div id="msg"></div>
+
+    <div class="link-section">
+      <input type="text" id="publicLink" readonly>
+      <button onclick="copyLink()">Copier le lien</button>
+    </div>
+
+    <h2>Inbox</h2>
+    <div class="inbox" id="inbox"></div>
+  </div>
+
+  <script>
+    const msgEl = document.getElementById("msg");
+    const inboxEl = document.getElementById("inbox");
+    const publicLinkEl = document.getElementById("publicLink");
+
+    function showMessage(text) {
+      msgEl.innerText = text;
+      msgEl.classList.add("show");
+      setTimeout(() => msgEl.classList.remove("show"), 3000);
+    }
+
+    function logout() {
+      localStorage.clear();
+      location="/login.html";
+    }
+
+    function copyLink() {
+      publicLinkEl.select();
+      navigator.clipboard.writeText(publicLinkEl.value);
+      showMessage("Lien copié !");
+    }
+
+    // Afficher le lien public
+    const username = localStorage.username;
+    if(username) publicLinkEl.value = `${location.origin}/u/${username}`;
+
+    // Récupérer inbox
+    async function loadInbox() {
+      const res = await fetch("/api/inbox", { headers: { Authorization: localStorage.token } });
+      const data = await res.json();
+      inboxEl.innerHTML = "";
+      if(!data || data.length === 0) {
+        inboxEl.innerHTML = "<p>Aucun message pour l'instant</p>";
+        return;
+      }
+      data.forEach(m => {
+        const div = document.createElement("div");
+        div.className = "message-card";
+        div.innerText = m.content;
+        inboxEl.appendChild(div);
+      });
+    }
+
+    loadInbox();
+    setInterval(loadInbox, 5000);
   </script>
 </body>
 </html>
