@@ -1,7 +1,7 @@
 {
   "name": "secret-story",
   "version": "1.0.0",
-  "description": "Secret Story - messages anonymes",
+  "description": "Secret Story - messages anonymes avec JSON",
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "express": "^4.19.2",
-    "sqlite3": "^5.1.6",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2"
   },
