@@ -39,25 +39,25 @@ app.get("/u/:username", (_, res) => res.sendFile("send.html",{root:__dirname}));
 // --- API ---
 // Register
 app.post("/api/register", (req,res)=>{
-  const {email,username,password} = req.body;
-  if(!email||!username||!password) return res.status(400).json({error:"Champs manquants"});
+  const {username,password} = req.body;
+  if(!username||!password) return res.status(400).json({error:"Champs manquants"});
   const users = readJSON(USERS_FILE);
-  if(users.find(u=>u.email===email || u.username===username)) return res.status(400).json({error:"Email ou username déjà pris"});
+  if(users.find(u=>u.username===username)) return res.status(400).json({error:"Username déjà pris"});
   const hash = bcrypt.hashSync(password, 10);
-  users.push({email,username,password:hash});
+  users.push({username,password:hash});
   writeJSON(USERS_FILE, users);
   res.json({success:true});
 });
 
 // Login
 app.post("/api/login", (req,res)=>{
-  const {email,password} = req.body;
-  if(!email||!password) return res.status(400).json({error:"Champs manquants"});
+  const {username,password} = req.body;
+  if(!username||!password) return res.status(400).json({error:"Champs manquants"});
   const users = readJSON(USERS_FILE);
-  const user = users.find(u=>u.email===email);
-  if(!user) return res.status(401).json({error:"Email ou mot de passe incorrect"});
+  const user = users.find(u=>u.username===username);
+  if(!user) return res.status(401).json({error:"Username ou mot de passe incorrect"});
   const ok = bcrypt.compareSync(password,user.password);
-  if(!ok) return res.status(401).json({error:"Email ou mot de passe incorrect"});
+  if(!ok) return res.status(401).json({error:"Username ou mot de passe incorrect"});
   const token = jwt.sign({username:user.username},JWT_SECRET);
   res.json({token,username:user.username});
 });
