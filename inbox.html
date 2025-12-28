@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="/styles.css">
+  <title>Secret Story - Inbox</title>
+</head>
+<body>
+  <div class="container">
+    <h2>Inbox privée</h2>
+    <input id="t" placeholder="Token inbox" />
+    <button onclick="load()">Voir messages</button>
+    <div id="box"></div>
+  </div>
+
+  <script>
+    async function load() {
+      const r = await fetch("/api/inbox/" + t.value);
+      const msgs = await r.json();
+      box.innerHTML = msgs.map(m => `<p>${m.content}</p>`).join("");
+    }
+  </script>
+</body>
+</html>
