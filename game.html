@@ -1,132 +1,122 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <title>Jeu 2Dé</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<title>Jeu de Dés Premium</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body {
+  margin: 0;
+  background: radial-gradient(circle,#2b2f44,#141625);
+  font-family: Arial;
+  color: white;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Chat animé en fond */
+#bg-cat {
+  position: absolute;
+  top: 10%;
+  left: -150px;
+  width: 150px;
+  height: 150px;
+  background: url('https://files.catbox.moe/rc0a5u.jpeg') no-repeat center/contain;
+  animation: moveCat 15s linear infinite;
+  opacity: 0.2;
+  z-index: 0;
+}
+
+@keyframes moveCat {
+  0% { left:-200px; top:10%; transform: rotate(0deg);}
+  50% { left:80%; top:15%; transform: rotate(15deg);}
+  100% { left:100%; top:10%; transform: rotate(-15deg);}
+}
+
+/* Conteneur du jeu */
+.container{
+  width: 330px;
+  margin: 30px auto;
+  background:#1c1f33;
+  border-radius:20px;
+  padding:20px;
+  box-shadow:0 0 25px rgba(0,0,0,.7);
+  position: relative;
+  z-index: 1;
+}
+
+.title{text-align:center;margin-bottom:15px;font-weight:bold;}
+.choices{display:flex;justify-content:space-between;margin-bottom:15px;}
+.choice{width:95px;background:#2a2e4d;border-radius:12px;padding:10px;text-align:center;cursor:pointer;border:2px solid transparent;}
+.choice.active{border-color:gold;}
+.mult{color:gold;font-size:13px;}
+input{width:100%;margin:15px 0;padding:12px;border-radius:10px;border:none;text-align:center;}
+.play{width:100%;background:#4caf50;padding:14px;border:none;border-radius:12px;font-size:18px;color:white;cursor:pointer;}
+.result{margin-top:15px;text-align:center;font-weight:bold;}
+
+/* Dé animé */
+#dice {
+  position: absolute;
+  width: 50px;
+  height: 50px;
+  background: url('https://s11.aconvert.com/convert/p3r68-cdx67/5p9rs-7jsu5.jpg') no-repeat center/contain;
+  top: -60px;
+  left: 50%;
+  transform: translateX(-50%);
+  transition: left 0.5s ease, top 0.3s ease;
+  z-index: 2;
+}
+</style>
 </head>
 <body>
-    <div class="header">
-        <h1>Bienvenue sur 2Dé</h1>
-        <div id="userInfo"></div>
-        <div id="balanceInfo"></div>
-    </div>
+<div id="bg-cat"></div>
+<div class="container">
+  <div class="title">Choisissez votre pari</div>
+  <div class="choices">
+    <div class="choice" onclick="setChoice('moins')">Moins de 7<br><span class="mult">x2.3</span></div>
+    <div class="choice" onclick="setChoice('egal')">Égal 7<br><span class="mult">x5.8</span></div>
+    <div class="choice" onclick="setChoice('plus')">Plus de 7<br><span class="mult">x2.3</span></div>
+  </div>
+  <input type="number" id="bet" value="200" min="200" max="666745">
+  <button class="play" onclick="play()">▶ Lancer</button>
+  <div class="result" id="result"></div>
+</div>
 
-    <div class="deposit-section">
-        <h2>Faire un dépôt (min 1000f)</h2>
-        <input type="number" id="depositAmount" placeholder="Montant">
-        <button id="depositBtn">Déposer</button>
-    </div>
+<!-- Dé animé -->
+<div id="dice"></div>
 
-    <div class="withdraw-section">
-        <h2>Retirer de l’argent</h2>
-        <input type="number" id="withdrawAmount" placeholder="Montant">
-        <button id="withdrawBtn">Retirer</button>
-    </div>
+<script>
+let user = JSON.parse(localStorage.getItem("user"));
+let choice=null;
+if(!user) location.href="login.html";
 
-    <div class="game-board">
-        <h2>Choisis ta case</h2>
-        <div class="cases">
-            <button class="case case1" data-case="1">1</button>
-            <button class="case case2" data-case="2">2</button>
-            <button class="case case3" data-case="3">3</button>
-            <button class="case case4" data-case="4">4</button>
-            <button class="case case5" data-case="5">5</button>
-            <button class="case case6" data-case="6">6</button>
-        </div>
-        <div class="bet-section">
-            <input type="number" id="betAmount" placeholder="Mise (min 50f)">
-            <button id="playBtn">Jouer</button>
-        </div>
-    </div>
+function setChoice(c){
+  choice=c;
+  document.querySelectorAll('.choice').forEach(el=>el.classList.remove('active'));
+  event.target.closest('.choice').classList.add('active');
+}
 
-    <div id="result"></div>
+function play(){
+  const bet=Number(document.getElementById("bet").value);
+  if(!choice){alert("Choisissez un pari");return;}
+  if(bet<200 || bet>666745){alert("Mise invalide");return;}
+  if(bet>user.balance){alert("Solde insuffisant");return;}
 
-    <script>
-        const urlParams = new URLSearchParams(window.location.search);
-        const user = urlParams.get('user');
-        const userInfo = document.getElementById('userInfo');
-        const balanceInfo = document.getElementById('balanceInfo');
-        const resultDiv = document.getElementById('result');
-        let selectedCase = null;
-        let balance = 0;
+  // Animation du dé aléatoire
+  const dice = document.getElementById("dice");
+  dice.style.left = `${Math.random()*250 + 30}px`; // mouvement horizontal
+  dice.style.top = `${Math.random()*30}px`;       // mouvement vertical
 
-        userInfo.innerHTML = `<strong>Utilisateur :</strong> ${user}`;
-
-        function fetchBalance() {
-            fetch(`/api/balance/${user}`)
-                .then(res => res.json())
-                .then(data => {
-                    balance = data.balance;
-                    balanceInfo.innerHTML = `<strong>Solde :</strong> ${balance}f`;
-                });
-        }
-
-        fetchBalance();
-
-        document.querySelectorAll('.case').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.case').forEach(b => b.classList.remove('selected'));
-                btn.classList.add('selected');
-                selectedCase = btn.getAttribute('data-case');
-            });
-        });
-
-        document.getElementById('depositBtn').addEventListener('click', () => {
-            const amount = parseInt(document.getElementById('depositAmount').value);
-            fetch('/api/deposit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: user, amount })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if(data.error) alert(data.error);
-                else {
-                    balance = data.balance;
-                    balanceInfo.innerHTML = `<strong>Solde :</strong> ${balance}f`;
-                }
-            });
-        });
-
-        document.getElementById('withdrawBtn').addEventListener('click', () => {
-            const amount = parseInt(document.getElementById('withdrawAmount').value);
-            fetch('/api/withdraw', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: user, amount })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if(data.error) alert(data.error);
-                else {
-                    balance = data.balance;
-                    balanceInfo.innerHTML = `<strong>Solde :</strong> ${balance}f`;
-                }
-            });
-        });
-
-        document.getElementById('playBtn').addEventListener('click', () => {
-            const bet = parseInt(document.getElementById('betAmount').value);
-            if (!selectedCase) { alert("Sélectionne une case !"); return; }
-            if (bet < 50) { alert("Mise minimale : 50f"); return; }
-            if (bet > balance) { alert("Solde insuffisant !"); return; }
-
-            fetch('/api/play', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: user, caseNumber: selectedCase, bet })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if(data.error) alert(data.error);
-                else {
-                    balance = data.balance;
-                    balanceInfo.innerHTML = `<strong>Solde :</strong> ${balance}f`;
-                    resultDiv.innerHTML = data.message;
-                }
-            });
-        });
-    </script>
+  fetch("/api/play",{method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({userId:user.id,bet,choice})})
+  .then(r=>r.json())
+  .then(d=>{
+    if(d.error) return alert(d.error);
+    user.balance=d.balance;
+    localStorage.setItem("user",JSON.stringify(user));
+    document.getElementById("result").innerText=`🎲 ${d.d1}+${d.d2}=${d.sum} → ${d.win?"GAGNÉ":"PERDU"}`;
+  });
+}
+</script>
 </body>
 </html>
