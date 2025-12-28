@@ -2,100 +2,50 @@
 <html>
 <head>
   <title>Secret Story - Login</title>
-  <style>
-    body {
-      margin:0;
-      font-family:'Segoe UI',sans-serif;
-      height:100vh;
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      background:#111;
-      color:#fff;
-    }
-    .container {
-      background:#1c1c1c;
-      padding:50px;
-      border-radius:20px;
-      width:90%;
-      max-width:500px;
-      box-shadow:0 0 20px rgba(24,255,255,0.3);
-      text-align:center;
-    }
-    h1 {font-size:3em;margin-bottom:30px;color:#18ffff;}
-    input {
-      font-size:1.5em;
-      padding:15px;
-      margin:10px 0;
-      width:80%;
-      border-radius:10px;
-      border:none;
-      background:#222;
-      color:#fff;
-      text-align:center;
-    }
-    button {
-      font-size:1.5em;
-      padding:15px 30px;
-      margin:10px;
-      border-radius:10px;
-      border:none;
-      background:#ff4081;
-      color:#fff;
-      cursor:pointer;
-      transition:0.3s;
-    }
-    button:hover {background:#e91e63;}
-    a {color:#18ffff;text-decoration:none;}
-
-    #msg {
-      font-size:1.2em;
-      color:#ff4081;
-      margin-top:15px;
-      min-height:1.5em;
-      transition:opacity 0.5s;
-      opacity:0;
-    }
-    #msg.show {opacity:1;}
-  </style>
+  <meta charset="UTF-8" />
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
 </head>
-<body>
-  <div class="container">
-    <h1>Connexion</h1>
-    <input id="username" placeholder="Username"><br>
-    <input id="password" type="password" placeholder="Password"><br>
-    <button onclick="login()">Se connecter</button><br>
-    <p>Pas encore de compte ? <a href="/register.html">S'inscrire</a></p>
-    <p id="msg"></p>
-  </div>
+<body style="background:#111;color:#fff;font-family:'Montserrat',sans-serif;">
+  <div id="root"></div>
 
-  <script>
-    const msgEl = document.getElementById("msg");
+  <script type="text/babel">
+    const {useState} = React;
 
-    function showMessage(text) {
-      msgEl.innerText = text;
-      msgEl.classList.add("show");
-      setTimeout(()=>msgEl.classList.remove("show"),3000);
+    function Login() {
+      const [username,setUsername] = useState("");
+      const [password,setPassword] = useState("");
+      const [msg,setMsg] = useState("");
+
+      const handleLogin = async () => {
+        if(!username || !password) return setMsg("Remplis tous les champs !");
+        const res = await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username,password})});
+        const data = await res.json();
+        if(data.error) return setMsg(data.error);
+        localStorage.token = data.token;
+        localStorage.username = data.username;
+        setMsg("Connexion réussie !");
+        setTimeout(()=>{ location="/dashboard"; },1500);
+      }
+
+      return (
+        <div style={containerStyle}>
+          <h1 style={{color:"#18ffff"}}>Connexion</h1>
+          <input placeholder="Username" value={username} onChange={e=>setUsername(e.target.value)} style={inputStyle} /><br/>
+          <input type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} style={inputStyle} /><br/>
+          <button onClick={handleLogin} style={btnStyle}>Se connecter</button>
+          <p style={{marginTop:"15px",color:"#ff4081"}}>{msg}</p>
+          <p><a href="/register.html" style={{color:"#ff4081"}}>S'inscrire</a></p>
+        </div>
+      );
     }
 
-    async function login() {
-      const username = document.getElementById("username").value;
-      const password = document.getElementById("password").value;
-      if(!username||!password) return showMessage("Remplis tous les champs !");
-      
-      const res = await fetch("/api/login",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({username,password})
-      });
-      const data = await res.json();
-      if(data.error) return showMessage(data.error);
+    const containerStyle={background:"#1c1c1c",padding:"50px",borderRadius:"20px",maxWidth:"500px",margin:"50px auto",textAlign:"center",boxShadow:"0 0 20px rgba(24,255,255,0.3)"};
+    const inputStyle={padding:"15px", fontSize:"1.5em", margin:"10px 0", width:"80%", borderRadius:"10px", border:"none", background:"#222", color:"#fff", textAlign:"center"};
+    const btnStyle={padding:"15px 30px", fontSize:"1.5em", margin:"10px", borderRadius:"10px", border:"none", background:"#ff4081", color:"#fff", cursor:"pointer"};
 
-      localStorage.token = data.token;
-      localStorage.username = data.username;
-      showMessage("Connexion réussie !");
-      setTimeout(()=>{ location="/dashboard"; },1500);
-    }
+    ReactDOM.render(<Login />, document.getElementById("root"));
   </script>
 </body>
 </html>
