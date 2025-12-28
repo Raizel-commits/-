@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Media Converter 🚀</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap');
+
+  * { box-sizing: border-box; margin:0; padding:0; }
+  body {
+    font-family: 'Montserrat', sans-serif;
+    background: linear-gradient(135deg, #1e1e2f, #2a2a3d);
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    padding: 50px 20px;
+    animation: backgroundAnim 20s linear infinite;
+  }
+
+  @keyframes backgroundAnim {
+    0% { background-position:0 0; }
+    50% { background-position:100% 100%; }
+    100% { background-position:0 0; }
+  }
+
+  h1 {
+    font-size: 2.5em;
+    margin-bottom: 20px;
+    text-shadow: 2px 2px 10px #000;
+    animation: fadeIn 2s ease forwards;
+  }
+
+  @keyframes fadeIn { from {opacity:0} to {opacity:1} }
+
+  .upload-container {
+    background: rgba(255,255,255,0.05);
+    padding: 30px;
+    border-radius: 20px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    backdrop-filter: blur(10px);
+    text-align: center;
+    animation: slideUp 1.5s ease forwards;
+  }
+
+  @keyframes slideUp { from {opacity:0; transform:translateY(50px);} to {opacity:1; transform:translateY(0);} }
+
+  input[type="file"] {
+    padding: 10px;
+    border-radius: 10px;
+    border:none;
+    background: rgba(255,255,255,0.2);
+    color:#fff;
+    font-weight: bold;
+    cursor:pointer;
+    transition: background 0.3s;
+  }
+  input[type="file"]:hover { background: rgba(255,255,255,0.4); }
+
+  button {
+    margin-top: 15px;
+    padding: 12px 25px;
+    border-radius: 10px;
+    border:none;
+    background: #ff4081;
+    color:#fff;
+    font-size: 16px;
+    font-weight:bold;
+    cursor:pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 5px 15px rgba(255,64,129,0.4);
+  }
+  button:hover {
+    transform: scale(1.05);
+    box-shadow: 0 8px 20px rgba(255,64,129,0.6);
+  }
+
+  #result {
+    margin-top: 30px;
+    word-break: break-all;
+  }
+
+  #result a { color:#ff4081; text-decoration:none; font-weight:bold; }
+  #result a:hover { text-decoration:underline; }
+
+  video, audio, img {
+    max-width: 400px;
+    margin-top:20px;
+    border-radius: 15px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+    animation: fadeIn 1s ease forwards;
+  }
+</style>
+</head>
+<body>
+<h1>🌟 Media Converter</h1>
+
+<div class="upload-container">
+  <h3>Déposez ou choisissez votre fichier</h3>
+  <input type="file" id="fileInput"><br>
+  <button onclick="uploadFile()">Convertir et générer URL</button>
+</div>
+
+<div id="result"></div>
+
+<script>
+async function uploadFile() {
+    const fileInput = document.getElementById('fileInput');
+    if (!fileInput.files.length) return alert("Choisissez un fichier !");
+
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+
+    const res = await fetch('/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    const resultDiv = document.getElementById('result');
+    resultDiv.innerHTML = `<p>URL: <a href="${data.url}" target="_blank">${data.url}</a></p>`;
+
+    const ext = data.url.split('.').pop().toLowerCase();
+    if(['mp4','webm'].includes(ext)) resultDiv.innerHTML += `<video src="${data.url}" controls></video>`;
+    else if(['mp3','wav','ogg'].includes(ext)) resultDiv.innerHTML += `<audio src="${data.url}" controls></audio>`;
+    else if(['png','jpg','jpeg','gif'].includes(ext)) resultDiv.innerHTML += `<img src="${data.url}" />`;
+}
+</script>
+</body>
+</html>
