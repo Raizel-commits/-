@@ -1,9 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Secret Story</title>
+  <title>Secret Story - Inbox</title>
   <style>
-    /* Fond animé */
     @keyframes gradient {
       0% {background-position: 0% 50%;}
       50% {background-position: 100% 50%;}
@@ -13,15 +12,16 @@
     body {
       margin: 0;
       font-family: 'Segoe UI', sans-serif;
-      height: 100vh;
+      min-height: 100vh;
       display: flex;
       justify-content: center;
-      align-items: center;
-      background: linear-gradient(270deg, #ff4081, #7c4dff, #18ffff);
+      align-items: flex-start;
+      background: linear-gradient(270deg, #18ffff, #7c4dff, #ff4081);
       background-size: 600% 600%;
       animation: gradient 20s ease infinite;
       color: #fff;
       text-align: center;
+      padding-top: 50px;
     }
 
     .container {
@@ -32,22 +32,17 @@
       max-width: 700px;
     }
 
-    h1 {
-      font-size: 4em;
-      margin-bottom: 20px;
-      color: #ff4081;
-    }
-
+    h2 { font-size: 3em; margin-bottom: 20px; color: #ff4081; }
     input {
       font-size: 2em;
       padding: 20px;
       width: 80%;
       border-radius: 15px;
       border: none;
-      margin: 20px 0;
-      text-align: center;
+      margin-bottom: 20px;
       background-color: #222;
       color: #fff;
+      text-align: center;
     }
 
     button {
@@ -59,32 +54,34 @@
       color: #fff;
       cursor: pointer;
       transition: 0.3s;
+      margin-bottom: 20px;
     }
 
     button:hover { background-color: #e91e63; }
 
-    p { font-size: 1.5em; margin-top: 20px; }
-    a { color: #18ffff; text-decoration: none; }
+    #box p {
+      font-size: 1.8em;
+      background-color: #333;
+      padding: 15px;
+      border-radius: 10px;
+      margin: 10px 0;
+      word-break: break-word;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Secret Story</h1>
-    <h2>Créer ton lien anonyme</h2>
-    <input id="u" placeholder="Nom d'utilisateur" />
-    <button onclick="create()">Créer</button>
-    <p id="result"></p>
+    <h2>Inbox privée</h2>
+    <input id="t" placeholder="Token inbox" />
+    <button onclick="load()">Voir messages</button>
+    <div id="box"></div>
   </div>
 
   <script>
-    async function create() {
-      const r = await fetch("/api/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: u.value })
-      });
-      const d = await r.json();
-      result.innerHTML = `Lien: <a href="/u/${d.username}">/u/${d.username}</a><br>Token inbox: ${d.inboxToken}`;
+    async function load() {
+      const r = await fetch("/api/inbox/" + t.value);
+      const msgs = await r.json();
+      box.innerHTML = msgs.map(m => `<p>${m.content}</p>`).join("");
     }
   </script>
 </body>
