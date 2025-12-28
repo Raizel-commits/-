@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Login</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h2>Connexion</h2>
+<input id="u" placeholder="Username">
+<input id="p" type="password">
+<button onclick="login()">Login</button>
+
+<script>
+async function login(){
+  const r = await fetch("/api/login",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({username:u.value,password:p.value})
+  });
+  if(r.ok){
+    localStorage.setItem("user",u.value);
+    location.href="game.html";
+  } else alert("Login incorrect");
+}
+</script>
+</body>
+</html>
