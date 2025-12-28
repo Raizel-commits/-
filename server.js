@@ -46,16 +46,34 @@ app.post("/api/register", async (req,res)=>{
   if(existing) return res.status(400).json({error:"Email ou username déjà pris"});
   const hash = await bcrypt.hash(password,10);
   await User.create({email,username,password:hash});
+  console.log("Nouvel utilisateur créé :", username);
   res.json({success:true});
 });
 
 app.post("/api/login", async (req,res)=>{
   const {email,password} = req.body;
   if(!email||!password) return res.status(400).json({error:"Champs manquants"});
+
   const user = await User.findOne({email});
   if(!user) return res.status(401).json({error:"Email ou mot de passe incorrect"});
+
+  console.log("Tentative login :", email);
+  console.log("Mot de passe stocké :", user.password);
+  console.log("Mot de passe entré :", password);
+
+  // Vérifie si le mot de passe est hashé
+  const isHash = user.password.startsWith("$2");
+  if(!isHash){
+    // Hash le mot de passe existant automatiquement
+    const newHash = await bcrypt.hash(user.password,10);
+    user.password = newHash;
+    await user.save();
+    console.log("Mot de passe ancien hash converti en hash sécurisé");
+  }
+
   const ok = await bcrypt.compare(password,user.password);
   if(!ok) return res.status(401).json({error:"Email ou mot de passe incorrect"});
+
   const token = jwt.sign({id:user._id,username:user.username},JWT_SECRET);
   res.json({token,username:user.username});
 });
