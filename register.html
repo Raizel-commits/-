@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Register</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h2>Créer un compte</h2>
+<input id="u" placeholder="Username">
+<input id="p" type="password" placeholder="Password">
+<button onclick="reg()">S'inscrire</button>
+
+<script>
+async function reg(){
+  const r = await fetch("/api/register",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({username:u.value,password:p.value})
+  });
+  r.ok ? location.href="login.html" : alert("Erreur");
+}
+</script>
+</body>
+</html>
