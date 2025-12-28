@@ -1,24 +1,26 @@
-const express = require("express");
-const bodyParser = require("body-parser");
-const fs = require("fs");
-const path = require("path");
+import express from "express";
+import bodyParser from "body-parser";
+import fs from "fs";
+import path from "path";
 
 const app = express();
 const PORT = 3000;
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
-app.use(express.static(__dirname));
+app.use(express.static(path.resolve()));
 
-const USERS_FILE = path.join(__dirname, "users.json");
+const USERS_FILE = path.join(path.resolve(), "users.json");
 
+// Lire utilisateurs
 function readUsers() {
     if (!fs.existsSync(USERS_FILE)) return [];
-    return JSON.parse(fs.readFileSync(USERS_FILE));
+    return JSON.parse(fs.readFileSync(USERS_FILE, "utf-8"));
 }
 
+// Sauvegarder utilisateurs
 function saveUsers(users) {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf-8");
 }
 
 // Register
