@@ -3,23 +3,14 @@
 <head>
   <title>Secret Story - Register</title>
   <style>
-    @keyframes gradient {
-      0% {background-position:0% 50%;}
-      50% {background-position:100% 50%;}
-      100% {background-position:0% 50%;}
-    }
-    body {
-      margin:0; font-family:'Segoe UI',sans-serif; height:100vh; display:flex;
-      justify-content:center; align-items:center;
-      background:linear-gradient(270deg,#ff4081,#7c4dff,#18ffff);
-      background-size:600% 600%; animation:gradient 20s ease infinite; color:#fff; text-align:center;
-    }
-    .container { background:rgba(0,0,0,0.7); padding:50px; border-radius:20px; width:90%; max-width:500px; }
-    h1 { font-size:3.5em; margin-bottom:30px; color:#ff4081; }
-    input { font-size:1.5em; padding:15px; margin:10px 0; width:80%; border-radius:10px; border:none; text-align:center; background:#222; color:#fff; }
-    button { font-size:1.5em; padding:15px 30px; margin:10px; border-radius:10px; border:none; background:#ff4081; color:#fff; cursor:pointer; transition:0.3s; }
-    button:hover { background:#e91e63; }
-    a { color:#18ffff; text-decoration:none; }
+    @keyframes gradient {0%{background-position:0% 50%;}50%{background-position:100% 50%;}100%{background-position:0% 50%;}}
+    body {margin:0;font-family:'Segoe UI',sans-serif;height:100vh;display:flex;justify-content:center;align-items:center;background:linear-gradient(270deg,#ff4081,#7c4dff,#18ffff);background-size:600% 600%;animation:gradient 20s ease infinite;color:#fff;text-align:center;}
+    .container {background:rgba(0,0,0,0.7);padding:50px;border-radius:20px;width:90%;max-width:500px;}
+    h1 {font-size:3.5em;margin-bottom:30px;color:#ff4081;}
+    input {font-size:1.5em;padding:15px;margin:10px 0;width:80%;border-radius:10px;border:none;text-align:center;background:#222;color:#fff;}
+    button {font-size:1.5em;padding:15px 30px;margin:10px;border-radius:10px;border:none;background:#ff4081;color:#fff;cursor:pointer;transition:0.3s;}
+    button:hover {background:#e91e63;}
+    a {color:#18ffff;text-decoration:none;}
   </style>
 </head>
 <body>
@@ -37,12 +28,8 @@
       const email = document.getElementById("email").value;
       const username = document.getElementById("username").value;
       const password = document.getElementById("password").value;
-      if(!email || !username || !password) return alert("Remplis tous les champs !");
-      const res = await fetch("/api/register", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ email, username, password })
-      });
+      if(!email||!username||!password) return alert("Remplis tous les champs !");
+      const res = await fetch("/api/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,username,password})});
       const data = await res.json();
       if(data.error) return alert(data.error);
       alert("Compte créé avec succès !");
