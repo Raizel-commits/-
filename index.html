@@ -1,12 +1,76 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <title>2Dé - Accueil</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<title>Accueil - Jeu de Dés</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+:root{
+  --bg-1: #040406;
+  --bg-2: #071012;
+  --neon: #dfffe6;
+  --glass-alpha: 0.12;
+  --glass-border: rgba(223,255,230,0.18);
+  --muted: rgba(255,255,255,0.45);
+  --card-w: 380px;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;
+background: radial-gradient(1200px 600px at 10% 10%, rgba(223,255,230,0.03), transparent),
+            radial-gradient(900px 500px at 90% 85%, rgba(223,255,230,0.02), transparent),
+            linear-gradient(180deg,var(--bg-1),var(--bg-2));
+color:#dfffe6;overflow:hidden;display:flex;justify-content:center;align-items:center;}
+
+#particles{position:fixed;inset:0;width:100%;height:100%;z-index:0;}
+.stage{position:relative;height:100vh;display:flex;align-items:center;justify-content:center;padding:36px; z-index:1;}
+.glass-card{
+  width:var(--card-w);max-width:92vw;
+  background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border-radius:18px;padding:22px;box-shadow:0 10px 40px rgba(0,0,0,0.7), 0 0 40px rgba(223,255,230,0.05) inset;
+  backdrop-filter: blur(10px) saturate(140%);
+  border:1px solid var(--glass-border);position:relative;overflow:hidden;text-align:center;
+}
+.glass-card h1{font-family:"JetBrains Mono",monospace;font-size:18px;color:var(--neon);margin:0 0 14px;text-shadow:0 0 18px rgba(223,255,230,0.22);}
+.glass-card a{
+  display:block;margin:10px 0;padding:12px;border-radius:10px;background:linear-gradient(180deg, rgba(223,255,230,0.06), rgba(223,255,230,0.02));
+  color:var(--neon);text-decoration:none;font-family:"JetBrains Mono",monospace;font-size:16px;transition:0.2s;
+}
+.glass-card a:hover{transform:scale(1.03);}
+</style>
 </head>
 <body>
-    <h1>Bienvenue sur 2Dé</h1>
-    <p><a href="register.html">S'inscrire</a> | <a href="login.html">Se connecter</a></p>
+<canvas id="particles"></canvas>
+<div class="stage">
+  <div class="glass-card">
+    <h1>Bienvenue au Jeu de Dés</h1>
+    <a href="login.html">Connexion</a>
+    <a href="register.html">Créer un compte</a>
+    <a href="game.html">Jouer sans compte</a>
+  </div>
+</div>
+
+<script>
+// PARTICLES
+const canvas=document.getElementById('particles');
+const ctx=canvas.getContext('2d');
+let w=canvas.width=window.innerWidth;
+let h=canvas.height=window.innerHeight;
+window.addEventListener('resize',()=>{w=canvas.width=window.innerWidth;h=canvas.height=window.innerHeight;});
+const particles=[];
+for(let i=0;i<120;i++){particles.push({x:Math.random()*w,y:Math.random()*h,r:Math.random()*2+1,speed:Math.random()*0.5+0.2});}
+function animate(){
+  ctx.clearRect(0,0,w,h);
+  for(let p of particles){
+    p.y-=p.speed;
+    if(p.y<0)p.y=h;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    ctx.fillStyle='rgba(223,255,230,0.25)';
+    ctx.fill();
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+</script>
 </body>
 </html>
