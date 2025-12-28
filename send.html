@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="/styles.css">
+  <title>Secret Story - Envoyer</title>
+</head>
+<body>
+  <div class="container">
+    <h2>Envoyer un message à Secret Story</h2>
+    <textarea id="m" placeholder="Ton message..."></textarea>
+    <button onclick="send()">Envoyer</button>
+    <p id="info"></p>
+  </div>
+
+  <script>
+    const username = location.pathname.split("/").pop();
+    async function send() {
+      const r = await fetch("/api/send/" + username, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: m.value })
+      });
+      const d = await r.json();
+      if(d.success) info.innerText = "Message envoyé ! ✅";
+    }
+  </script>
+</body>
+</html>
