@@ -1,0 +1,47 @@
+body {
+  background:#0f0f1a;
+  color:white;
+  font-family:Arial;
+  text-align:center;
+}
+.top {
+  display:flex;
+  justify-content:space-between;
+  padding:15px;
+  background:#141424;
+}
+.plus {
+  background:gold;
+  border:none;
+  width:40px;
+  border-radius:50%;
+}
+.cards {
+  display:flex;
+  justify-content:center;
+  gap:10px;
+}
+.card {
+  background:#1f1f33;
+  padding:15px;
+  width:100px;
+  border-radius:10px;
+  cursor:pointer;
+}
+.card.active {
+  border:2px solid gold;
+}
+.bet-box button {
+  margin:5px;
+  padding:10px;
+}
+.play {
+  background:limegreen;
+  padding:15px 40px;
+  border-radius:10px;
+  font-size:18px;
+}
+.dice {
+  font-size:40px;
+  margin-top:10px;
+}
