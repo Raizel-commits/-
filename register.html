@@ -3,37 +3,96 @@
 <head>
   <title>Secret Story - Register</title>
   <style>
-    @keyframes gradient {0%{background-position:0% 50%;}50%{background-position:100% 50%;}100%{background-position:0% 50%;}}
-    body {margin:0;font-family:'Segoe UI',sans-serif;height:100vh;display:flex;justify-content:center;align-items:center;background:linear-gradient(270deg,#ff4081,#7c4dff,#18ffff);background-size:600% 600%;animation:gradient 20s ease infinite;color:#fff;text-align:center;}
-    .container {background:rgba(0,0,0,0.7);padding:50px;border-radius:20px;width:90%;max-width:500px;}
-    h1 {font-size:3.5em;margin-bottom:30px;color:#ff4081;}
-    input {font-size:1.5em;padding:15px;margin:10px 0;width:80%;border-radius:10px;border:none;text-align:center;background:#222;color:#fff;}
-    button {font-size:1.5em;padding:15px 30px;margin:10px;border-radius:10px;border:none;background:#ff4081;color:#fff;cursor:pointer;transition:0.3s;}
+    body {
+      margin:0;
+      font-family:'Segoe UI',sans-serif;
+      height:100vh;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      background:#111; /* fond noir */
+      color:#fff;
+    }
+    .container {
+      background:#1c1c1c;
+      padding:50px;
+      border-radius:20px;
+      width:90%;
+      max-width:500px;
+      box-shadow:0 0 20px rgba(255,64,129,0.3);
+      text-align:center;
+    }
+    h1 {font-size:3em;margin-bottom:30px;color:#ff4081;}
+    input {
+      font-size:1.5em;
+      padding:15px;
+      margin:10px 0;
+      width:80%;
+      border-radius:10px;
+      border:none;
+      background:#222;
+      color:#fff;
+      text-align:center;
+    }
+    button {
+      font-size:1.5em;
+      padding:15px 30px;
+      margin:10px;
+      border-radius:10px;
+      border:none;
+      background:#ff4081;
+      color:#fff;
+      cursor:pointer;
+      transition:0.3s;
+    }
     button:hover {background:#e91e63;}
     a {color:#18ffff;text-decoration:none;}
+    
+    /* Message intégré */
+    #msg {
+      font-size:1.2em;
+      color:#18ffff;
+      margin-top:15px;
+      min-height:1.5em;
+      transition:opacity 0.5s;
+      opacity:0;
+    }
+    #msg.show {opacity:1;}
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Créer un compte</h1>
-    <input id="email" placeholder="Email"><br>
     <input id="username" placeholder="Username"><br>
     <input id="password" type="password" placeholder="Password"><br>
     <button onclick="register()">S'inscrire</button><br>
     <p>Déjà un compte ? <a href="/login.html">Connexion</a></p>
+    <p id="msg"></p>
   </div>
 
   <script>
+    const msgEl = document.getElementById("msg");
+
+    function showMessage(text) {
+      msgEl.innerText = text;
+      msgEl.classList.add("show");
+      setTimeout(()=>msgEl.classList.remove("show"),3000);
+    }
+
     async function register() {
-      const email = document.getElementById("email").value;
       const username = document.getElementById("username").value;
       const password = document.getElementById("password").value;
-      if(!email||!username||!password) return alert("Remplis tous les champs !");
-      const res = await fetch("/api/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,username,password})});
+      if(!username||!password) return showMessage("Remplis tous les champs !");
+      
+      const res = await fetch("/api/register",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({username,password})
+      });
       const data = await res.json();
-      if(data.error) return alert(data.error);
-      alert("Compte créé avec succès !");
-      location="/login.html";
+      if(data.error) return showMessage(data.error);
+      showMessage("Compte créé avec succès !");
+      setTimeout(()=>{ location="/login.html"; },1500);
     }
   </script>
 </body>
