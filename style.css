@@ -1,47 +1,57 @@
 body {
-  background:#0f0f1a;
-  color:white;
-  font-family:Arial;
-  text-align:center;
+    font-family: Arial, sans-serif;
+    text-align: center;
+    background-color: #f0f0f0;
+    margin: 0;
+    padding: 20px;
 }
-.top {
-  display:flex;
-  justify-content:space-between;
-  padding:15px;
-  background:#141424;
+
+.header { margin-bottom: 20px; }
+h1, h2 { color: #333; }
+
+.deposit-section, .withdraw-section, .game-board {
+    background-color: #fff;
+    padding: 15px;
+    margin: 10px auto;
+    width: 400px;
+    border-radius: 10px;
+    box-shadow: 0 0 5px #aaa;
 }
-.plus {
-  background:gold;
-  border:none;
-  width:40px;
-  border-radius:50%;
+
+.cases {
+    display: flex;
+    justify-content: space-between;
+    margin: 15px 0;
 }
-.cards {
-  display:flex;
-  justify-content:center;
-  gap:10px;
+
+.case {
+    width: 50px;
+    height: 50px;
+    font-size: 18px;
+    font-weight: bold;
+    border: 2px solid #333;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: 0.2s;
 }
-.card {
-  background:#1f1f33;
-  padding:15px;
-  width:100px;
-  border-radius:10px;
-  cursor:pointer;
+
+.case:hover { transform: scale(1.1); }
+.case.selected { background-color: #4CAF50; color: white; }
+
+.case1, .case3 { background-color: #FFD700; }
+.case2 { background-color: #FF6347; }
+
+.bet-section input { width: 120px; padding: 5px; }
+.bet-section button, .deposit-section button, .withdraw-section button {
+    padding: 6px 12px;
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+    margin-left: 5px;
 }
-.card.active {
-  border:2px solid gold;
-}
-.bet-box button {
-  margin:5px;
-  padding:10px;
-}
-.play {
-  background:limegreen;
-  padding:15px 40px;
-  border-radius:10px;
-  font-size:18px;
-}
-.dice {
-  font-size:40px;
-  margin-top:10px;
-}
+
+.bet-section button:hover, .deposit-section button:hover, .withdraw-section button:hover { background-color: #0b7dda; }
+
+#result { margin-top: 15px; font-weight: bold; }
