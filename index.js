@@ -1,78 +1,103 @@
-import express from "express";
-import fs from "fs";
-import cors from "cors";
+const express = require("express");
+const bodyParser = require("body-parser");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(express.static("."));
+const PORT = 3000;
 
-const USERS_FILE = "./users.json";
-const MIN_BET = 50;
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+app.use(express.static(__dirname));
 
-const readUsers = () =>
-  JSON.parse(fs.readFileSync(USERS_FILE, "utf8"));
+const USERS_FILE = path.join(__dirname, "users.json");
 
-const saveUsers = (users) =>
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+function readUsers() {
+    if (!fs.existsSync(USERS_FILE)) return [];
+    return JSON.parse(fs.readFileSync(USERS_FILE));
+}
 
-/* REGISTER */
-app.post("/api/register", (req, res) => {
-  const { username, password } = req.body;
-  const users = readUsers();
+function saveUsers(users) {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+}
 
-  if (users.find(u => u.username === username))
-    return res.status(400).json({ error: "Utilisateur existe" });
-
-  users.push({ username, password, balance: 1000 });
-  saveUsers(users);
-
-  res.json({ success: true });
+// Register
+app.post("/register", (req, res) => {
+    const { username, password } = req.body;
+    const users = readUsers();
+    if (users.find(u => u.username === username)) return res.send("Utilisateur déjà existant.");
+    users.push({ username, password, balance: 0 });
+    saveUsers(users);
+    res.redirect("/login.html");
 });
 
-/* LOGIN */
-app.post("/api/login", (req, res) => {
-  const { username, password } = req.body;
-  const user = readUsers().find(
-    u => u.username === username && u.password === password
-  );
-
-  if (!user) return res.status(401).json({ error: "Erreur login" });
-  res.json({ success: true, username });
+// Login
+app.post("/login", (req, res) => {
+    const { username, password } = req.body;
+    const users = readUsers();
+    const user = users.find(u => u.username === username && u.password === password);
+    if (!user) return res.send("Identifiant ou mot de passe incorrect.");
+    res.redirect(`/game.html?user=${username}`);
 });
 
-/* BALANCE */
-app.get("/api/balance/:user", (req, res) => {
-  const user = readUsers().find(u => u.username === req.params.user);
-  res.json({ balance: user.balance });
+// API: Obtenir solde
+app.get("/api/balance/:username", (req, res) => {
+    const users = readUsers();
+    const user = users.find(u => u.username === req.params.username);
+    if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
+    res.json({ balance: user.balance });
 });
 
-/* PLAY */
+// API: Dépôt
+app.post("/api/deposit", (req, res) => {
+    const { username, amount } = req.body;
+    const users = readUsers();
+    const user = users.find(u => u.username === username);
+    if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
+    if (parseInt(amount) < 1000) return res.status(400).json({ error: "Dépôt minimum 1000f" });
+    user.balance += parseInt(amount);
+    saveUsers(users);
+    res.json({ balance: user.balance });
+});
+
+// API: Retrait
+app.post("/api/withdraw", (req, res) => {
+    const { username, amount } = req.body;
+    const users = readUsers();
+    const user = users.find(u => u.username === username);
+    if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
+    const amt = parseInt(amount);
+    if (amt > user.balance) return res.status(400).json({ error: "Solde insuffisant" });
+    user.balance -= amt;
+    saveUsers(users);
+    res.json({ balance: user.balance });
+});
+
+// API: Jouer
 app.post("/api/play", (req, res) => {
-  const { username, bet, choice } = req.body;
-  const users = readUsers();
-  const user = users.find(u => u.username === username);
+    const { username, caseNumber, bet } = req.body;
+    const users = readUsers();
+    const user = users.find(u => u.username === username);
+    if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
+    
+    const betAmount = parseInt(bet);
+    if (betAmount < 50) return res.status(400).json({ error: "Mise minimale 50f" });
+    if (betAmount > user.balance) return res.status(400).json({ error: "Solde insuffisant" });
+    
+    user.balance -= betAmount;
+    const winningCase = Math.floor(Math.random() * 6) + 1;
+    let gain = 0;
+    let message = `La case gagnante est ${winningCase}. `;
+    if (parseInt(caseNumber) === winningCase) {
+        gain = betAmount * 5;
+        user.balance += gain;
+        message += `Félicitations ! Vous gagnez ${gain}f.`;
+    } else {
+        message += "Dommage, vous perdez votre mise.";
+    }
 
-  if (!user || bet < MIN_BET || bet > user.balance)
-    return res.status(400).json({ error: "Mise invalide" });
-
-  const d1 = Math.floor(Math.random() * 6) + 1;
-  const d2 = Math.floor(Math.random() * 6) + 1;
-  const sum = d1 + d2;
-
-  let win = false, mult = 0;
-  if (choice === "plus" && sum > 7) { win = true; mult = 2.3; }
-  if (choice === "egal" && sum === 7) { win = true; mult = 5.8; }
-  if (choice === "moins" && sum < 7) { win = true; mult = 2.3; }
-
-  if (win) user.balance += bet * mult;
-  else user.balance -= bet;
-
-  saveUsers(users);
-
-  res.json({ d1, d2, sum, win, balance: user.balance });
+    saveUsers(users);
+    res.json({ message, balance: user.balance });
 });
 
-app.listen(3000, () =>
-  console.log("🎲 2Dé lancé : http://localhost:3000/login.html")
-);
+app.listen(PORT, () => console.log(`Serveur lancé sur http://localhost:${PORT}`));
