@@ -6,24 +6,35 @@ import path from "path";
 const app = express();
 const PORT = 3000;
 
+// Servir les fichiers statiques
+app.use(express.static(path.resolve()));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
-app.use(express.static(path.resolve()));
 
 const USERS_FILE = path.join(path.resolve(), "users.json");
 
-// Lire utilisateurs
+// ==========================
+// Fonctions utilitaires
+// ==========================
 function readUsers() {
     if (!fs.existsSync(USERS_FILE)) return [];
     return JSON.parse(fs.readFileSync(USERS_FILE, "utf-8"));
 }
 
-// Sauvegarder utilisateurs
 function saveUsers(users) {
     fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf-8");
 }
 
-// Register
+// ==========================
+// Redirection racine
+// ==========================
+app.get("/", (req, res) => {
+    res.redirect("/login.html");
+});
+
+// ==========================
+// Routes utilisateurs
+// ==========================
 app.post("/register", (req, res) => {
     const { username, password } = req.body;
     const users = readUsers();
@@ -33,7 +44,6 @@ app.post("/register", (req, res) => {
     res.redirect("/login.html");
 });
 
-// Login
 app.post("/login", (req, res) => {
     const { username, password } = req.body;
     const users = readUsers();
@@ -42,7 +52,11 @@ app.post("/login", (req, res) => {
     res.redirect(`/game.html?user=${username}`);
 });
 
-// API: Obtenir solde
+// ==========================
+// API Money Fusion
+// ==========================
+
+// Obtenir solde
 app.get("/api/balance/:username", (req, res) => {
     const users = readUsers();
     const user = users.find(u => u.username === req.params.username);
@@ -50,7 +64,7 @@ app.get("/api/balance/:username", (req, res) => {
     res.json({ balance: user.balance });
 });
 
-// API: Dépôt
+// Dépôt
 app.post("/api/deposit", (req, res) => {
     const { username, amount } = req.body;
     const users = readUsers();
@@ -62,7 +76,7 @@ app.post("/api/deposit", (req, res) => {
     res.json({ balance: user.balance });
 });
 
-// API: Retrait
+// Retrait
 app.post("/api/withdraw", (req, res) => {
     const { username, amount } = req.body;
     const users = readUsers();
@@ -75,7 +89,7 @@ app.post("/api/withdraw", (req, res) => {
     res.json({ balance: user.balance });
 });
 
-// API: Jouer
+// Jouer
 app.post("/api/play", (req, res) => {
     const { username, caseNumber, bet } = req.body;
     const users = readUsers();
@@ -102,4 +116,7 @@ app.post("/api/play", (req, res) => {
     res.json({ message, balance: user.balance });
 });
 
+// ==========================
+// Lancer le serveur
+// ==========================
 app.listen(PORT, () => console.log(`Serveur lancé sur http://localhost:${PORT}`));
