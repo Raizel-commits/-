@@ -2,93 +2,47 @@
 <html>
 <head>
   <title>Secret Story - Envoyer un message</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap');
-    body {
-      margin:0;
-      font-family:'Montserrat',sans-serif;
-      height:100vh;
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      background:#111;
-      color:#fff;
-    }
-    .container {
-      background:#1c1c1c;
-      padding:50px;
-      border-radius:20px;
-      width:90%;
-      max-width:500px;
-      box-shadow:0 0 20px rgba(255,64,129,0.3);
-      text-align:center;
-    }
-    h1 {font-size:3em;margin-bottom:30px;color:#ff4081;}
-    textarea {
-      width:80%;
-      height:150px;
-      border-radius:15px;
-      border:none;
-      padding:15px;
-      background:#222;
-      color:#fff;
-      font-size:1.2em;
-      resize:none;
-    }
-    button {
-      margin-top:15px;
-      font-size:1.5em;
-      padding:15px 30px;
-      border-radius:10px;
-      border:none;
-      background:#ff4081;
-      color:#fff;
-      cursor:pointer;
-      transition:0.3s;
-    }
-    button:hover {background:#e91e63;}
-    #msg {
-      font-size:1.2em;
-      color:#18ffff;
-      margin-top:15px;
-      opacity:0;
-      transition:opacity 0.5s;
-    }
-    #msg.show {opacity:1;}
-  </style>
+  <meta charset="UTF-8" />
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
 </head>
-<body>
-  <div class="container">
-    <h1>Envoyer un message</h1>
-    <textarea id="message" placeholder="Votre message ici..."></textarea><br>
-    <button onclick="sendMessage()">Envoyer</button>
-    <p id="msg"></p>
-  </div>
+<body style="background:#111;color:#fff;font-family:'Montserrat',sans-serif;">
+  <div id="root"></div>
 
-  <script>
-    const msgEl = document.getElementById("msg");
-    const messageEl = document.getElementById("message");
-    const username = location.pathname.split("/u/")[1];
+  <script type="text/babel">
+    const {useState} = React;
 
-    function showMessage(text) {
-      msgEl.innerText = text;
-      msgEl.classList.add("show");
-      setTimeout(()=>msgEl.classList.remove("show"),3000);
+    function Send() {
+      const [message,setMessage] = useState("");
+      const [msg,setMsg] = useState("");
+      const username = location.pathname.split("/u/")[1];
+
+      const sendMessage = async () => {
+        if(!message.trim()) return setMsg("Écris quelque chose !");
+        const res = await fetch(`/api/send/${username}`,{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({message})
+        });
+        const data = await res.json();
+        if(data.error) return setMsg(data.error);
+        setMsg("Message envoyé !");
+        setMessage("");
+        setTimeout(()=>setMsg(""),3000);
+      }
+
+      return (
+        <div style={{background:"#1c1c1c",padding:"50px",borderRadius:"20px",maxWidth:"500px",margin:"50px auto",textAlign:"center"}}>
+          <h1 style={{color:"#ff4081"}}>Envoyer un message</h1>
+          <textarea value={message} onChange={e=>setMessage(e.target.value)} placeholder="Votre message..." style={{width:"80%",height:"150px",borderRadius:"15px",border:"none",padding:"15px",background:"#222",color:"#fff",fontSize:"1.2em"}}></textarea><br/>
+          <button onClick={sendMessage} style={{marginTop:"15px", fontSize:"1.5em", padding:"15px 30px", borderRadius:"10px", border:"none", background:"#ff4081", color:"#fff"}}>Envoyer</button>
+          <p style={{color:"#18ffff", marginTop:"15px"}}>{msg}</p>
+        </div>
+      );
     }
 
-    async function sendMessage() {
-      const message = messageEl.value.trim();
-      if(!message) return showMessage("Écris quelque chose !");
-      const res = await fetch(`/api/send/${username}`,{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({message})
-      });
-      const data = await res.json();
-      if(data.error) return showMessage(data.error);
-      messageEl.value="";
-      showMessage("Message envoyé !");
-    }
+    ReactDOM.render(<Send />, document.getElementById("root"));
   </script>
 </body>
 </html>
