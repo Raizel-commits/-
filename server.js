@@ -8,17 +8,19 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 🔑 Connexion MongoDB directe
+// 🔑 MongoDB direct
 const MONGO_URI = "mongodb+srv://minetrol:jarix55%40@cluster0.kxdu8z9.mongodb.net/minetrol?retryWrites=true&w=majority";
 mongoose.connect(MONGO_URI);
-console.log("MongoDB connecté");
+mongoose.connection.on("connected", () => console.log("✅ MongoDB connecté"));
+mongoose.connection.on("error", err => console.log("❌ MongoDB Error:", err));
 
-// 🌐 Express
 const app = express();
+
+// 🌐 Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(rateLimit({ windowMs: 60_000, max: 10 }));
-app.use(express.static(__dirname));
+app.use(express.static(__dirname)); // sert tous les fichiers à la racine
 
 // 📦 Models
 const User = mongoose.model("User", {
@@ -38,36 +40,42 @@ const Message = mongoose.model("Message", {
 app.get("/", (_, res) => res.sendFile("index.html", { root: __dirname }));
 app.get("/u/:username", (_, res) => res.sendFile("send.html", { root: __dirname }));
 app.get("/inbox", (_, res) => res.sendFile("inbox.html", { root: __dirname }));
-app.get("/styles.css", (_, res) => res.sendFile("styles.css", { root: __dirname }));
 
-// 🔐 API
+// 🔐 API Routes
 app.post("/api/create", async (req, res) => {
-  const user = await User.create({
-    username: req.body.username,
-    inboxToken: CryptoJS.SHA256(req.body.username + Date.now()).toString()
-  });
-  res.json(user);
+  try {
+    const user = await User.create({
+      username: req.body.username,
+      inboxToken: CryptoJS.SHA256(req.body.username + Date.now()).toString()
+    });
+    res.json(user);
+  } catch (err) {
+    if (err.code === 11000) return res.status(400).json({ error: "Nom d'utilisateur déjà pris" });
+    res.status(500).json({ error: "Erreur serveur" });
+  }
 });
 
 app.post("/api/send/:username", async (req, res) => {
   const user = await User.findOne({ username: req.params.username });
-  if (!user) return res.sendStatus(404);
+  if (!user) return res.status(404).json({ error: "Utilisateur introuvable" });
 
   await Message.create({
     toUserId: user._id,
     content: req.body.message,
     ipHash: CryptoJS.SHA256(req.ip).toString()
   });
+
   res.json({ success: true });
 });
 
 app.get("/api/inbox/:token", async (req, res) => {
   const user = await User.findOne({ inboxToken: req.params.token });
-  if (!user) return res.sendStatus(401);
+  if (!user) return res.status(401).json({ error: "Token invalide" });
 
-  const msgs = await Message.find({ toUserId: user._id });
+  const msgs = await Message.find({ toUserId: user._id }).sort({ createdAt: -1 });
   res.json(msgs);
 });
 
-// 🚀 Lancement
-app.listen(3000, () => console.log("✅ Secret Story lancé sur http://localhost:3000"));
+// 🚀 Lancement serveur
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`✅ Secret Story lancé sur http://localhost:${PORT}`));
