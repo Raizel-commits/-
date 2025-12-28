@@ -1,17 +1,36 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <title>Inscription 2Dé</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<title>Inscription</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body { background: radial-gradient(circle,#2b2f44,#141625); color:white; font-family:Arial; height:100vh; margin:0; display:flex; justify-content:center; align-items:center; position:relative; }
+#bg-cat { position:absolute; top:10%; left:-150px; width:150px; height:150px; background:url('assets/cat.png') no-repeat center/contain; animation: moveCat 15s linear infinite; opacity:0.2; z-index:0; }
+@keyframes moveCat { 0% { left:-200px; } 50% { left:80%; } 100% { left:100%; } }
+.box { background: rgba(28,31,51,0.95); padding:25px; border-radius:20px; width:320px; text-align:center; z-index:1; box-shadow:0 0 25px rgba(0,0,0,0.7);}
+h2 { margin-bottom:20px;}
+input { width:100%; padding:12px; margin:10px 0; border-radius:12px; border:none; font-size:16px; box-sizing:border-box;}
+button { width:100%; padding:12px; margin-top:10px; border-radius:12px; border:none; background:linear-gradient(135deg,#FFD700,#FFA500); color:black; font-size:16px; cursor:pointer; transition: transform 0.2s, box-shadow 0.2s;}
+button:hover { transform:scale(1.05); box-shadow:0 0 15px rgba(255,215,0,0.7);}
+</style>
 </head>
 <body>
-    <h1>Inscription 2Dé</h1>
-    <form action="/register" method="POST">
-        <input type="text" name="username" placeholder="Nom d'utilisateur" required><br>
-        <input type="password" name="password" placeholder="Mot de passe" required><br>
-        <button type="submit">S'inscrire</button>
-    </form>
-    <p>Déjà inscrit ? <a href="login.html">Connectez-vous</a></p>
+<div id="bg-cat"></div>
+<div class="box">
+<h2>Inscription</h2>
+<input id="u" placeholder="Nom d'utilisateur">
+<input id="p" type="password" placeholder="Mot de passe">
+<button onclick="reg()">Créer un compte</button>
+</div>
+<script>
+function reg(){
+  const username = document.getElementById('u').value;
+  const password = document.getElementById('p').value;
+  if(!username || !password){ alert("Remplissez tous les champs"); return; }
+  fetch("/api/register",{method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({username,password})})
+  .then(r=>r.json()).then(d=>{ if(d.error) alert(d.error); else location.href="login.html"; });
+}
+</script>
 </body>
 </html>
