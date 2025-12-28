@@ -1,5 +1,5 @@
 import express from "express";
-import sqlite3 from "sqlite3";
+import fs from "fs";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import path from "path";
@@ -13,27 +13,23 @@ const JWT_SECRET = "SECRET_STORY_KEY";
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// --- SQLite ---
-const db = new sqlite3.Database("./users.db", (err) => {
-  if (err) console.error(err.message);
-  else console.log("✅ SQLite connecté");
-});
+// --- JSON files ---
+const USERS_FILE = path.join(__dirname, "users.json");
+const MESSAGES_FILE = path.join(__dirname, "messages.json");
 
-// Tables
-db.run(`CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  email TEXT UNIQUE,
-  username TEXT UNIQUE,
-  password TEXT
-)`);
-db.run(`CREATE TABLE IF NOT EXISTS messages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  toUser TEXT,
-  content TEXT,
-  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-)`);
+// Init files if not exist
+if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, "[]");
+if (!fs.existsSync(MESSAGES_FILE)) fs.writeFileSync(MESSAGES_FILE, "[]");
 
-// Pages
+function readJSON(file) {
+  return JSON.parse(fs.readFileSync(file, "utf-8"));
+}
+
+function writeJSON(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+}
+
+// --- Pages ---
 app.get("/", (_, res) => res.redirect("/login.html"));
 app.get("/register.html", (_, res) => res.sendFile("register.html",{root:__dirname}));
 app.get("/login.html", (_, res) => res.sendFile("login.html",{root:__dirname}));
@@ -41,38 +37,32 @@ app.get("/dashboard", (_, res) => res.sendFile("dashboard.html",{root:__dirname}
 app.get("/u/:username", (_, res) => res.sendFile("send.html",{root:__dirname}));
 
 // --- API ---
-
 // Register
 app.post("/api/register", (req,res)=>{
   const {email,username,password} = req.body;
   if(!email||!username||!password) return res.status(400).json({error:"Champs manquants"});
+  const users = readJSON(USERS_FILE);
+  if(users.find(u=>u.email===email || u.username===username)) return res.status(400).json({error:"Email ou username déjà pris"});
   const hash = bcrypt.hashSync(password, 10);
-  const stmt = db.prepare("INSERT INTO users (email, username, password) VALUES (?, ?, ?)");
-  stmt.run(email, username, hash, function(err){
-    if(err){
-      if(err.message.includes("UNIQUE")) return res.status(400).json({error:"Email ou username déjà pris"});
-      return res.status(500).json({error:"Erreur serveur"});
-    }
-    res.json({success:true});
-  });
-  stmt.finalize();
+  users.push({email,username,password:hash});
+  writeJSON(USERS_FILE, users);
+  res.json({success:true});
 });
 
 // Login
 app.post("/api/login", (req,res)=>{
   const {email,password} = req.body;
   if(!email||!password) return res.status(400).json({error:"Champs manquants"});
-  db.get("SELECT * FROM users WHERE email = ?", [email], (err,user)=>{
-    if(err) return res.status(500).json({error:"Erreur serveur"});
-    if(!user) return res.status(401).json({error:"Email ou mot de passe incorrect"});
-    const ok = bcrypt.compareSync(password,user.password);
-    if(!ok) return res.status(401).json({error:"Email ou mot de passe incorrect"});
-    const token = jwt.sign({id:user.id,username:user.username},JWT_SECRET);
-    res.json({token,username:user.username});
-  });
+  const users = readJSON(USERS_FILE);
+  const user = users.find(u=>u.email===email);
+  if(!user) return res.status(401).json({error:"Email ou mot de passe incorrect"});
+  const ok = bcrypt.compareSync(password,user.password);
+  if(!ok) return res.status(401).json({error:"Email ou mot de passe incorrect"});
+  const token = jwt.sign({username:user.username},JWT_SECRET);
+  res.json({token,username:user.username});
 });
 
-// Middleware auth
+// Auth middleware
 function auth(req,res,next){
   const header = req.headers.authorization;
   if(!header) return res.status(401).json({error:"Non autorisé"});
@@ -82,24 +72,21 @@ function auth(req,res,next){
 
 // Inbox
 app.get("/api/inbox", auth, (req,res)=>{
-  db.all("SELECT * FROM messages WHERE toUser = ? ORDER BY createdAt DESC", [req.user.username], (err,rows)=>{
-    if(err) return res.status(500).json({error:"Erreur serveur"});
-    res.json(rows);
-  });
+  const messages = readJSON(MESSAGES_FILE).filter(m=>m.to===req.user.username);
+  messages.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  res.json(messages);
 });
 
 // Envoyer message anonyme
 app.post("/api/send/:username", (req,res)=>{
   const {message} = req.body;
   if(!message||!message.trim()) return res.status(400).json({error:"Message vide"});
-  const stmt = db.prepare("INSERT INTO messages (toUser, content) VALUES (?, ?)");
-  stmt.run(req.params.username,message.trim(), function(err){
-    if(err) return res.status(500).json({error:"Erreur serveur"});
-    res.json({success:true});
-  });
-  stmt.finalize();
+  const messages = readJSON(MESSAGES_FILE);
+  messages.push({to:req.params.username, content:message.trim(), createdAt:new Date()});
+  writeJSON(MESSAGES_FILE, messages);
+  res.json({success:true});
 });
 
-// Lancement serveur
+// --- Lancement serveur ---
 const PORT = process.env.PORT || 3000;
-app.listen(PORT,()=>console.log(`🚀 Secret Story SQLite lancé sur http://localhost:${PORT}`));
+app.listen(PORT,()=>console.log(`🚀 Secret Story JSON lancé sur http://localhost:${PORT}`));
