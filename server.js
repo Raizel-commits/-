@@ -1,5 +1,5 @@
 import express from "express";
-import mongoose from "mongoose";
+import sqlite3 from "sqlite3";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import path from "path";
@@ -7,29 +7,31 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 const app = express();
 const JWT_SECRET = "SECRET_STORY_KEY";
-
-// MongoDB
-mongoose.connect("mongodb+srv://minetrol:jarix55%40@cluster0.kxdu8z9.mongodb.net/minetrol");
-mongoose.connection.once("open", async () => {
-  console.log("✅ MongoDB connecté");
-  try { await mongoose.connection.collection("users").dropIndexes(); console.log("✅ Indexes réinitialisés"); } 
-  catch(e){ console.log("⚠️ Aucun index à supprimer"); }
-});
 
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// Modèles
-const userSchema = new mongoose.Schema({
-  email: { type: String, unique: true, required: true },
-  username: { type: String, unique: true, required: true },
-  password: { type: String, required: true }
+// --- SQLite ---
+const db = new sqlite3.Database("./users.db", (err) => {
+  if (err) console.error(err.message);
+  else console.log("✅ SQLite connecté");
 });
-const User = mongoose.model("User", userSchema);
-const Message = mongoose.model("Message", { to:String, content:String, createdAt:{ type:Date, default:Date.now }});
+
+// Tables
+db.run(`CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT UNIQUE,
+  username TEXT UNIQUE,
+  password TEXT
+)`);
+db.run(`CREATE TABLE IF NOT EXISTS messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  toUser TEXT,
+  content TEXT,
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
 
 // Pages
 app.get("/", (_, res) => res.redirect("/login.html"));
@@ -38,47 +40,39 @@ app.get("/login.html", (_, res) => res.sendFile("login.html",{root:__dirname}));
 app.get("/dashboard", (_, res) => res.sendFile("dashboard.html",{root:__dirname}));
 app.get("/u/:username", (_, res) => res.sendFile("send.html",{root:__dirname}));
 
-// APIs
-app.post("/api/register", async (req,res)=>{
+// --- API ---
+
+// Register
+app.post("/api/register", (req,res)=>{
   const {email,username,password} = req.body;
   if(!email||!username||!password) return res.status(400).json({error:"Champs manquants"});
-  const existing = await User.findOne({$or:[{email},{username}]});
-  if(existing) return res.status(400).json({error:"Email ou username déjà pris"});
-  const hash = await bcrypt.hash(password,10);
-  await User.create({email,username,password:hash});
-  console.log("Nouvel utilisateur créé :", username);
-  res.json({success:true});
+  const hash = bcrypt.hashSync(password, 10);
+  const stmt = db.prepare("INSERT INTO users (email, username, password) VALUES (?, ?, ?)");
+  stmt.run(email, username, hash, function(err){
+    if(err){
+      if(err.message.includes("UNIQUE")) return res.status(400).json({error:"Email ou username déjà pris"});
+      return res.status(500).json({error:"Erreur serveur"});
+    }
+    res.json({success:true});
+  });
+  stmt.finalize();
 });
 
-app.post("/api/login", async (req,res)=>{
+// Login
+app.post("/api/login", (req,res)=>{
   const {email,password} = req.body;
   if(!email||!password) return res.status(400).json({error:"Champs manquants"});
-
-  const user = await User.findOne({email});
-  if(!user) return res.status(401).json({error:"Email ou mot de passe incorrect"});
-
-  console.log("Tentative login :", email);
-  console.log("Mot de passe stocké :", user.password);
-  console.log("Mot de passe entré :", password);
-
-  // Vérifie si le mot de passe est hashé
-  const isHash = user.password.startsWith("$2");
-  if(!isHash){
-    // Hash le mot de passe existant automatiquement
-    const newHash = await bcrypt.hash(user.password,10);
-    user.password = newHash;
-    await user.save();
-    console.log("Mot de passe ancien hash converti en hash sécurisé");
-  }
-
-  const ok = await bcrypt.compare(password,user.password);
-  if(!ok) return res.status(401).json({error:"Email ou mot de passe incorrect"});
-
-  const token = jwt.sign({id:user._id,username:user.username},JWT_SECRET);
-  res.json({token,username:user.username});
+  db.get("SELECT * FROM users WHERE email = ?", [email], (err,user)=>{
+    if(err) return res.status(500).json({error:"Erreur serveur"});
+    if(!user) return res.status(401).json({error:"Email ou mot de passe incorrect"});
+    const ok = bcrypt.compareSync(password,user.password);
+    if(!ok) return res.status(401).json({error:"Email ou mot de passe incorrect"});
+    const token = jwt.sign({id:user.id,username:user.username},JWT_SECRET);
+    res.json({token,username:user.username});
+  });
 });
 
-// Auth middleware
+// Middleware auth
 function auth(req,res,next){
   const header = req.headers.authorization;
   if(!header) return res.status(401).json({error:"Non autorisé"});
@@ -87,19 +81,25 @@ function auth(req,res,next){
 }
 
 // Inbox
-app.get("/api/inbox", auth, async (req,res)=>{
-  const msgs = await Message.find({to:req.user.username}).sort({createdAt:-1});
-  res.json(msgs);
+app.get("/api/inbox", auth, (req,res)=>{
+  db.all("SELECT * FROM messages WHERE toUser = ? ORDER BY createdAt DESC", [req.user.username], (err,rows)=>{
+    if(err) return res.status(500).json({error:"Erreur serveur"});
+    res.json(rows);
+  });
 });
 
 // Envoyer message anonyme
-app.post("/api/send/:username", async (req,res)=>{
+app.post("/api/send/:username", (req,res)=>{
   const {message} = req.body;
   if(!message||!message.trim()) return res.status(400).json({error:"Message vide"});
-  await Message.create({to:req.params.username,content:message.trim()});
-  res.json({success:true});
+  const stmt = db.prepare("INSERT INTO messages (toUser, content) VALUES (?, ?)");
+  stmt.run(req.params.username,message.trim(), function(err){
+    if(err) return res.status(500).json({error:"Erreur serveur"});
+    res.json({success:true});
+  });
+  stmt.finalize();
 });
 
 // Lancement serveur
 const PORT = process.env.PORT || 3000;
-app.listen(PORT,()=>console.log(`🚀 Secret Story lancé sur http://localhost:${PORT}`));
+app.listen(PORT,()=>console.log(`🚀 Secret Story SQLite lancé sur http://localhost:${PORT}`));
