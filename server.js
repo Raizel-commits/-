@@ -1,108 +1,49 @@
 import express from "express";
-import fs from "fs";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+import multer from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
+import { exec } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 const app = express();
-const JWT_SECRET = process.env.JWT_SECRET || "SECRET_STORY_KEY";
-
-app.use(express.json());
 app.use(express.static(__dirname));
 
-// --- JSON files ---
-const USERS_FILE = path.join(__dirname, "users.json");
-const MESSAGES_FILE = path.join(__dirname, "messages.json");
+const upload = multer({ dest: 'uploads/' });
 
-// Init files if not exist
-if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, "[]");
-if (!fs.existsSync(MESSAGES_FILE)) fs.writeFileSync(MESSAGES_FILE, "[]");
+app.post('/upload', upload.single('file'), async (req, res) => {
+    const file = req.file;
+    const ext = path.extname(file.originalname).toLowerCase();
+    let outputFile = '';
 
-// Helper functions
-function readJSON(file) {
-  return JSON.parse(fs.readFileSync(file, "utf-8"));
-}
-function writeJSON(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2));
-}
+    try {
+        if(['.mp4','.webm'].includes(ext)) {
+            outputFile = `uploads/${file.filename}.mp3`;
+            await execPromise(`ffmpeg -i "${file.path}" -q:a 0 -map a "${outputFile}"`);
+        } else if(['.mp3','.wav','.ogg'].includes(ext)) {
+            const imgPath = 'placeholder.jpg'; 
+            outputFile = `uploads/${file.filename}.mp4`;
+            await execPromise(`ffmpeg -loop 1 -i "${imgPath}" -i "${file.path}" -c:v libx264 -c:a aac -b:a 192k -shortest "${outputFile}"`);
+        } else {
+            outputFile = `uploads/${file.filename}${ext}`;
+            fs.renameSync(file.path, outputFile);
+        }
 
-// --- Pages ---
-app.get("/", (_, res) => res.redirect("/login.html"));
-app.get("/login.html", (_, res) => res.sendFile("login.html", { root: __dirname }));
-app.get("/register.html", (_, res) => res.sendFile("register.html", { root: __dirname }));
-app.get("/dashboard", (_, res) => res.sendFile("dashboard.html", { root: __dirname }));
-app.get("/u/:username", (_, res) => res.sendFile("send.html", { root: __dirname }));
-
-// --- API ---
-// Register
-app.post("/api/register", (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: "Champs manquants" });
-
-  const users = readJSON(USERS_FILE);
-  if (users.find(u => u.username === username)) return res.status(400).json({ error: "Username déjà pris" });
-
-  const hash = bcrypt.hashSync(password, 10);
-  users.push({ username, password: hash });
-  writeJSON(USERS_FILE, users);
-  res.json({ success: true });
+        const url = `${req.protocol}://${req.get('host')}/${outputFile}`;
+        res.json({ url });
+    } catch (e) {
+        console.error(e);
+        res.status(500).send("Erreur lors de la conversion");
+    }
 });
 
-// Login
-app.post("/api/login", (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: "Champs manquants" });
-
-  const users = readJSON(USERS_FILE);
-  const user = users.find(u => u.username === username);
-  if (!user) return res.status(401).json({ error: "Username ou mot de passe incorrect" });
-
-  const ok = bcrypt.compareSync(password, user.password);
-  if (!ok) return res.status(401).json({ error: "Username ou mot de passe incorrect" });
-
-  const token = jwt.sign({ username: user.username }, JWT_SECRET);
-  res.json({ token, username: user.username });
-});
-
-// Auth middleware
-function auth(req, res, next) {
-  const header = req.headers.authorization;
-  if (!header) return res.status(401).json({ error: "Non autorisé" });
-
-  try {
-    req.user = jwt.verify(header, JWT_SECRET);
-    next();
-  } catch {
-    res.status(401).json({ error: "Token invalide" });
-  }
+function execPromise(cmd) {
+    return new Promise((resolve, reject) => {
+        exec(cmd, (err, stdout, stderr) => err ? reject(err) : resolve(stdout));
+    });
 }
 
-// Inbox
-app.get("/api/inbox", auth, (req, res) => {
-  const messages = readJSON(MESSAGES_FILE)
-    .filter(m => m.to === req.user.username)
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  res.json(messages);
-});
+if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
 
-// Envoyer message anonyme
-app.post("/api/send/:username", (req, res) => {
-  const { message } = req.body;
-  if (!message || !message.trim()) return res.status(400).json({ error: "Message vide" });
-  if (message.length > 500) return res.status(400).json({ error: "Message trop long" });
-
-  const messages = readJSON(MESSAGES_FILE);
-  messages.push({ to: req.params.username, content: message.trim(), createdAt: new Date() });
-  writeJSON(MESSAGES_FILE, messages);
-
-  console.log(`✉️ Nouveau message pour ${req.params.username}: ${message.trim()}`);
-  res.json({ success: true });
-});
-
-// --- Start server ---
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Secret Story lancé sur http://localhost:${PORT}`));
+app.listen(3000, () => console.log("Serveur sur http://localhost:3000"));
