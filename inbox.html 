@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Secret Story - Inbox</title>
+  <style>
+    @keyframes gradient {
+      0% {background-position: 0% 50%;}
+      50% {background-position: 100% 50%;}
+      100% {background-position: 0% 50%;}
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      background: linear-gradient(270deg, #18ffff, #7c4dff, #ff4081);
+      background-size: 600% 600%;
+      animation: gradient 20s ease infinite;
+      color: #fff;
+      text-align: center;
+      padding-top: 50px;
+    }
+
+    .container {
+      background-color: rgba(0,0,0,0.7);
+      padding: 50px;
+      border-radius: 20px;
+      width: 90%;
+      max-width: 700px;
+    }
+
+    h2 { font-size: 3em; margin-bottom: 20px; color: #ff4081; }
+
+    input {
+      font-size: 2em;
+      padding: 20px;
+      width: 80%;
+      border-radius: 15px;
+      border: none;
+      margin-bottom: 20px;
+      background-color: #222;
+      color: #fff;
+      text-align: center;
+    }
+
+    button {
+      font-size: 2em;
+      padding: 20px 40px;
+      border-radius: 15px;
+      border: none;
+      background-color: #ff4081;
+      color: #fff;
+      cursor: pointer;
+      transition: 0.3s;
+      margin-bottom: 20px;
+    }
+
+    button:hover { background-color: #e91e63; }
+
+    #box p {
+      font-size: 1.8em;
+      background-color: #333;
+      padding: 15px;
+      border-radius: 10px;
+      margin: 10px 0;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Inbox privée</h2>
+    <input id="tokenInput" placeholder="Token inbox" />
+    <button onclick="loadInbox()">Voir messages</button>
+    <div id="box"></div>
+  </div>
+
+  <script>
+    async function loadInbox() {
+      const token = document.getElementById("tokenInput").value.trim();
+      if (!token) {
+        alert("Veuillez entrer votre token inbox !");
+        return;
+      }
+
+      const r = await fetch("/api/inbox/" + token);
+      if (r.status === 401) {
+        alert("Token invalide !");
+        return;
+      }
+
+      const msgs = await r.json();
+      const box = document.getElementById("box");
+      if (!msgs.length) {
+        box.innerHTML = "<p>Aucun message pour le moment.</p>";
+        return;
+      }
+
+      box.innerHTML = msgs.map(m => `<p>${m.content}</p>`).join("");
+    }
+  </script>
+</body>
+</html>
