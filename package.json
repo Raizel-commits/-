@@ -1,20 +1,12 @@
 {
-  "name": "media-to-url",
+  "name": "2de-game",
   "version": "1.0.0",
-  "description": "Convertisseur Media → URL avec animations et prévisualisation",
-  "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node index.js"
   },
-  "author": "TonNom",
-  "license": "MIT",
   "dependencies": {
-    "express": "*",
-    "multer": "*"
-  },
-  "devDependencies": {
-    "nodemon": "*"
+    "express": "^4.19.2",
+    "cors": "^2.8.5"
   }
 }
