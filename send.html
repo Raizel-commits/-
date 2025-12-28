@@ -66,21 +66,34 @@
 <body>
   <div class="container">
     <h2>Envoyer un message à Secret Story</h2>
-    <textarea id="m" placeholder="Ton message..."></textarea>
+    <textarea id="messageInput" placeholder="Ton message..."></textarea>
     <button onclick="send()">Envoyer</button>
     <p id="info"></p>
   </div>
 
   <script>
     const username = location.pathname.split("/").pop();
+
     async function send() {
+      const msg = document.getElementById("messageInput").value.trim();
+      if (!msg) {
+        alert("Veuillez entrer un message !");
+        return;
+      }
+
       const r = await fetch("/api/send/" + username, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: m.value })
+        body: JSON.stringify({ message: msg })
       });
+
       const d = await r.json();
-      if(d.success) info.innerText = "Message envoyé ! ✅";
+      if (d.success) {
+        document.getElementById("info").innerText = "Message envoyé ! ✅";
+        document.getElementById("messageInput").value = "";
+      } else {
+        document.getElementById("info").innerText = d.error || "Erreur lors de l'envoi";
+      }
     }
   </script>
 </body>
