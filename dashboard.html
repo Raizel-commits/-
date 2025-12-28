@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Secret Story - Dashboard</title>
+  <style>
+    @keyframes gradient {
+      0% {background-position: 0% 50%;}
+      50% {background-position: 100% 50%;}
+      100% {background-position: 0% 50%;}
+    }
+
+    body {
+      margin:0;
+      font-family:'Segoe UI',sans-serif;
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      background: linear-gradient(270deg,#18ffff,#7c4dff,#ff4081);
+      background-size:600% 600%;
+      animation: gradient 20s ease infinite;
+      color:#fff;
+      text-align:center;
+      padding:30px 0;
+    }
+
+    .container { background:rgba(0,0,0,0.7); padding:40px; border-radius:20px; width:90%; max-width:700px; }
+    h2 { font-size:3em; color:#ff4081; margin-bottom:20px; }
+    #link { font-size:1.8em; margin-bottom:20px; word-break:break-all; }
+    #box p { font-size:1.5em; background:#333; padding:15px; border-radius:10px; margin:10px 0; word-break:break-word; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Ton lien Secret Story</h2>
+    <p id="link"></p>
+    <h3>Messages reçus</h3>
+    <div id="box"></div>
+  </div>
+
+  <script>
+    link.innerText = location.origin + "/u/" + localStorage.username;
+
+    fetch("/api/inbox",{ headers:{ authorization: localStorage.token } })
+    .then(r=>r.json())
+    .then(m=> box.innerHTML = m.map(x=>`<p>${x.content}</p>`).join(""));
+  </script>
+</body>
+</html>
